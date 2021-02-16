@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotutil"
 	"gonum.org/v1/plot/vg"
@@ -47,11 +48,12 @@ func (b *waterBoiler) advance(powerDuringTimeElapsed float64, secondsElapsed int
 
 // Basic integration test over a simulated period of time.
 func TestPidController_WaterBoilerSimulation(t *testing.T) {
+	setpoint := float64(60)
 	clock := newSimulatedClock()
 	boiler := newWaterBoiler()
 	controller := NewPIDController(
 		clock,
-		60,
+		setpoint,
 		0.05,
 		0,
 		0,
@@ -76,6 +78,8 @@ func TestPidController_WaterBoilerSimulation(t *testing.T) {
 		clock.advance(secondsPerIteration)
 		boiler.advance(power, secondsPerIteration)
 	}
+
+	assert.InDeltaf(t, setpoint, temps[loops-1], 0.5, "expected temperature after control loops to reach near setpoint of %.3f; got %.3f", setpoint, temps[loops-1])
 
 	// Plot the results
 	p, err := plot.New()
@@ -107,4 +111,40 @@ func toPlotterXYs(x []int, y []float64) plotter.XYs {
 		points[i].Y = y[i]
 	}
 	return points
+}
+
+// Ensures that if the elapsed time is equal to the minimum sample time,
+// the main control loop will still run so the last output is not returned.
+func TestPidController_Output_MinSampleTimeIsExclusive(t *testing.T) {
+	elapsedTime := 1
+	minSampleTime := float64(elapsedTime)
+	setpoint := float64(50)
+
+	clock := newSimulatedClock()
+	controller := NewPIDController(clock, setpoint, 1, 0, 0, 0, 100, minSampleTime)
+
+	// Perform an initial loop so that the minSampleTime check will take place.
+	initialOutput := controller.Output(10)
+
+	// Perform our test loop.
+	clock.advance(elapsedTime)
+	nextOutput := controller.Output(70)
+	assert.NotEqualf(t, nextOutput, initialOutput, "expected controller outputs not equal; got initial %.3f and next %.3f", initialOutput, nextOutput)
+}
+
+func TestPidController_Output_ReturnsLastOutputIfMinSampleTimeNotElapsed(t *testing.T) {
+	minSampleTime := float64(5)
+	elapsedTime := 3
+	setpoint := float64(50)
+
+	clock := newSimulatedClock()
+	controller := NewPIDController(clock, setpoint, 1, 0, 0, 0, 100, minSampleTime)
+
+	// Perform an initial loop so that the minSampleTime check will take place.
+	initialOutput := controller.Output(10)
+
+	// Perform our test loop.
+	clock.advance(elapsedTime)
+	nextOutput := controller.Output(70)
+	assert.InDeltaf(t, nextOutput, initialOutput, 1e-7, "expected controller outputs equal; got initial %.3f, next %.3f", initialOutput, nextOutput)
 }
