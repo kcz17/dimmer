@@ -7,6 +7,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/jamiealquiza/tachymeter"
@@ -23,13 +24,23 @@ func main() {
 		log.Fatal("BE_PORT env var is missing.")
 	}
 
+	envWindow := os.Getenv("NUM_REQUESTS_WINDOW")
+	if envWindow == "" {
+		log.Fatal("NUM_REQUESTS_WINDOW env var is missing.")
+	}
+
+	window, err := strconv.Atoi(envWindow)
+	if err != nil {
+		log.Fatal("NUM_REQUESTS_WINDOW env var cannot be converted to integer.")
+	}
+
+	tach := tachymeter.New(&tachymeter.Config{Size: window})
+	go controller(tach)
+
 	backendUrl, err := url.Parse("http://localhost:" + bp)
 	if err != nil {
 		log.Fatalf("Error parsing backend url: %v", err)
 	}
-
-	tach := tachymeter.New(&tachymeter.Config{Size: 50})
-	go controller(tach)
 
 	proxy := httputil.NewSingleHostReverseProxy(backendUrl)
 	http.HandleFunc("/", func(rw http.ResponseWriter, req *http.Request) {
