@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"os"
 	"time"
+
+	"github.com/jamiealquiza/tachymeter"
 )
 
 func main() {
@@ -26,20 +28,26 @@ func main() {
 		log.Fatalf("Error parsing backend url: %v", err)
 	}
 
+	tach := tachymeter.New(&tachymeter.Config{Size: 50})
+	go controller(tach)
+
 	proxy := httputil.NewSingleHostReverseProxy(backendUrl)
 	http.HandleFunc("/", func(rw http.ResponseWriter, req *http.Request) {
 		startTime := time.Now()
 		proxy.ServeHTTP(rw, req)
 		duration := time.Now().Sub(startTime)
-		http.SetCookie(rw, &http.Cookie{
-			Name:  "Test",
-			Value: fmt.Sprintf("response: %s", duration),
-		})
-		log.Printf("request: %s", duration)
+		tach.AddTime(duration)
 	})
 
 	err = http.ListenAndServe(fmt.Sprintf(":%v", fp), nil)
 	if err != nil {
 		log.Fatalf("Error serving reverse proxy: %v", err)
+	}
+}
+
+func controller(tach *tachymeter.Tachymeter) {
+	for range time.Tick(time.Second * 1) {
+		metrics := tach.Calc()
+		fmt.Printf("[%s] p50: %s, p95: %s\n", time.Now().Format(time.StampMilli), metrics.Time.P50, metrics.Time.P95)
 	}
 }
