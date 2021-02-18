@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/kcz17/dimmer/controller"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -35,7 +36,21 @@ func main() {
 	}
 
 	tach := tachymeter.New(&tachymeter.Config{Size: window})
-	go controller(tach)
+	pid, err := controller.NewPIDController(
+		controller.NewRealtimeClock(),
+		1000,
+		0.1,
+		0.0,
+		0.0,
+		true,
+		0,
+		100,
+		1,
+	)
+	if err != nil {
+		log.Fatalf("expected controller.NewPIDController() returns nil err; got err = %v", err)
+	}
+	go dimmer(tach, pid)
 
 	backendUrl, err := url.Parse("http://localhost:" + bp)
 	if err != nil {
@@ -56,9 +71,10 @@ func main() {
 	}
 }
 
-func controller(tach *tachymeter.Tachymeter) {
+func dimmer(tach *tachymeter.Tachymeter, pid *controller.PIDController) {
 	for range time.Tick(time.Second * 1) {
 		metrics := tach.Calc()
-		fmt.Printf("[%s] p50: %s, p95: %s\n", time.Now().Format(time.StampMilli), metrics.Time.P50, metrics.Time.P95)
+		pidOutput := pid.Output(float64(metrics.Time.P95) / float64(time.Second))
+		fmt.Printf("[%s] p50: %s, p95: %s\n, dimming: %.2f%", time.Now().Format(time.StampMilli), metrics.Time.P50, metrics.Time.P95, pidOutput)
 	}
 }
