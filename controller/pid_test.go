@@ -2,6 +2,7 @@ package controller
 
 import (
 	"gonum.org/v1/plot/plotter"
+	"math"
 	"testing"
 	"time"
 
@@ -51,16 +52,18 @@ func TestPidController_WaterBoilerSimulation(t *testing.T) {
 	setpoint := float64(60)
 	clock := newSimulatedClock()
 	boiler := newWaterBoiler()
-	controller := NewPIDController(
+	controller, err := NewPIDController(
 		clock,
 		setpoint,
 		0.05,
 		0,
 		0,
+		false,
 		0,
 		100,
 		0.5,
 	)
+	assert.Nilf(t, err, "expected NewPIDController(...) has no err; got %v", err)
 
 	loops := 300
 	secondsPerIteration := 5
@@ -121,7 +124,8 @@ func TestPidController_Output_MinSampleTimeIsExclusive(t *testing.T) {
 	setpoint := float64(50)
 
 	clock := newSimulatedClock()
-	controller := NewPIDController(clock, setpoint, 1, 0, 0, 0, 100, minSampleTime)
+	controller, err := NewPIDController(clock, setpoint, 1, 0, 0, false, 0, 100, minSampleTime)
+	assert.Nilf(t, err, "expected NewPIDController(...) has no err; got %v", err)
 
 	// Perform an initial loop so that the minSampleTime check will take place.
 	initialOutput := controller.Output(10)
@@ -138,7 +142,8 @@ func TestPidController_Output_ReturnsLastOutputIfMinSampleTimeNotElapsed(t *test
 	setpoint := float64(50)
 
 	clock := newSimulatedClock()
-	controller := NewPIDController(clock, setpoint, 1, 0, 0, 0, 100, minSampleTime)
+	controller, err := NewPIDController(clock, setpoint, 1, 0, 0, false, 0, 100, minSampleTime)
+	assert.Nilf(t, err, "expected NewPIDController(...) has no err; got %v", err)
 
 	// Perform an initial loop so that the minSampleTime check will take place.
 	initialOutput := controller.Output(10)
@@ -147,4 +152,21 @@ func TestPidController_Output_ReturnsLastOutputIfMinSampleTimeNotElapsed(t *test
 	clock.advance(elapsedTime)
 	nextOutput := controller.Output(70)
 	assert.InDeltaf(t, nextOutput, initialOutput, 1e-7, "expected controller outputs equal; got initial %.3f, next %.3f", initialOutput, nextOutput)
+}
+
+func TestPidController_Output_withReversedInput(t *testing.T) {
+	kp, ki, kd := 2.0, 3.0, 4.0
+	isReversed := true
+	setpoint := 1000.0
+
+	clock := newSimulatedClock()
+	controller, err := NewPIDController(clock, setpoint, kp, ki, kd, isReversed, math.Inf(-1), math.Inf(1), 1)
+	assert.Nilf(t, err, "expected NewPIDController(...) has no err; got %v", err)
+
+	initialOutput := controller.Output(1500)
+
+	// Perform our test loop.
+	clock.advance(3)
+	nextOutput := controller.Output(950)
+	assert.Equalf(t, true, initialOutput > nextOutput, "expected initial output > next output; got initial %.3f and next %.3f", initialOutput, nextOutput)
 }
