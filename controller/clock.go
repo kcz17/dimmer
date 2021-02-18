@@ -8,4 +8,8 @@ type Clock interface {
 
 type RealtimeClock struct{}
 
+func NewRealtimeClock() RealtimeClock {
+	return RealtimeClock{}
+}
+
 func (RealtimeClock) Now() time.Time { return time.Now() }

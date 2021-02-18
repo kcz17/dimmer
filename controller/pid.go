@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-type pidController struct {
+type PIDController struct {
 	clock         Clock     // Used to read the current time in a testable manner.
 	setpoint      float64   // Setpoint for the PID to aim to achieve.
 	kp            float64   // Proportional gain constant.
@@ -20,7 +20,7 @@ type pidController struct {
 	integral      float64   // Running integral term for PID calculation.
 }
 
-func NewPIDController(clock Clock, setpoint float64, kp float64, ki float64, kd float64, isReversed bool, minOutput float64, maxOutput float64, minSampleTime float64) (*pidController, error) {
+func NewPIDController(clock Clock, setpoint float64, kp float64, ki float64, kd float64, isReversed bool, minOutput float64, maxOutput float64, minSampleTime float64) (*PIDController, error) {
 	if kp < 0 || ki < 0 || kd < 0 {
 		errors.New("expected positive controller parameters; got negative (toggle isReversed instead)")
 	}
@@ -33,7 +33,7 @@ func NewPIDController(clock Clock, setpoint float64, kp float64, ki float64, kd 
 		kd = -kd
 	}
 
-	return &pidController{
+	return &PIDController{
 		clock:         clock,
 		setpoint:      setpoint,
 		kp:            kp,
@@ -45,7 +45,7 @@ func NewPIDController(clock Clock, setpoint float64, kp float64, ki float64, kd 
 	}, nil
 }
 
-func (c *pidController) Output(input float64) float64 {
+func (c *PIDController) Output(input float64) float64 {
 	now := c.clock.Now()
 
 	// The elapsed time > 0 only once a control loop has been made.
