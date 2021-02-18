@@ -75,6 +75,6 @@ func dimmer(tach *tachymeter.Tachymeter, pid *controller.PIDController) {
 	for range time.Tick(time.Second * 1) {
 		metrics := tach.Calc()
 		pidOutput := pid.Output(float64(metrics.Time.P95) / float64(time.Second))
-		fmt.Printf("[%s] p50: %s, p95: %s\n, dimming: %.2f\n", time.Now().Format(time.StampMilli), metrics.Time.P50, metrics.Time.P95, pidOutput)
+		fmt.Printf("[%s] p50: %s, p95: %s, dimming: %.2f%%\n", time.Now().Format(time.StampMilli), metrics.Time.P50, metrics.Time.P95, pidOutput)
 	}
 }
