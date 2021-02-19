@@ -43,7 +43,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("expected controller.NewPIDController() returns nil err; got err = %v", err)
 	}
-	go dimmer(tach, pid)
+	go dimmer(tach, pid, NewStdLogger())
 
 	backendUrl, err := url.Parse("http://localhost:" + config.backEndPort)
 	if err != nil {
@@ -64,11 +64,15 @@ func main() {
 	}
 }
 
-func dimmer(tach *tachymeter.Tachymeter, pid *controller.PIDController) {
+func dimmer(tach *tachymeter.Tachymeter, pid *controller.PIDController, logger Logger) {
 	for range time.Tick(time.Second * 1) {
 		metrics := tach.Calc()
-		pidOutput := pid.Output(float64(metrics.Time.P95) / float64(time.Second))
-		fmt.Printf("[%s] p50: %s, p95: %s, dimming: %.2f%%\n", time.Now().Format(time.StampMilli), metrics.Time.P50, metrics.Time.P95, pidOutput)
+
+		// PID controller and logger operate with seconds.
+		p50 := float64(metrics.Time.P50) / float64(time.Second)
+		p95 := float64(metrics.Time.P95) / float64(time.Second)
+		pidOutput := pid.Output(p95)
+		logger.LogControlLoop(p50, p95, pidOutput)
 	}
 }
 
