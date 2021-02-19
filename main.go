@@ -38,7 +38,7 @@ func main() {
 	tach := tachymeter.New(&tachymeter.Config{Size: window})
 	pid, err := controller.NewPIDController(
 		controller.NewRealtimeClock(),
-		1000,
+		1,
 		0.1,
 		0.0,
 		0.0,
