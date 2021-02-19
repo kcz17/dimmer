@@ -7,26 +7,29 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
-	"strconv"
 	"time"
 
+	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/jamiealquiza/tachymeter"
 )
 
-type config struct {
-	frontEndPort           string
-	backEndPort            string
-	requestsWindow         int
-	controllerSamplePeriod float64
-	controllerSetpoint     float64
-	controllerKp           float64
-	controllerKi           float64
-	controllerKd           float64
+type Config struct {
+	frontEndPort           string  `env:"FE_PORT"`
+	backEndPort            string  `env:"BE_PORT"`
+	requestsWindow         int     `env:"NUM_REQUESTS_WINDOW"`
+	controllerSamplePeriod float64 `env:"CONTROLLER_SAMPLE_PERIOD"`
+	controllerSetpoint     float64 `env:"CONTROLLER_SETPOINT"`
+	controllerKp           float64 `env:"CONTROLLER_KP"`
+	controllerKi           float64 `env:"CONTROLLER_KI"`
+	controllerKd           float64 `env:"CONTROLLER_KD"`
 }
 
 func main() {
-	config := loadConfig()
+	var config Config
+	err := cleanenv.ReadEnv(&config)
+	if err != nil {
+		log.Fatalf("expected err == nil in cleanenv.ReadEnv(); got err = %v", err)
+	}
 
 	tach := tachymeter.New(&tachymeter.Config{Size: config.requestsWindow})
 	pid, err := controller.NewPIDController(
@@ -73,83 +76,5 @@ func dimmer(tach *tachymeter.Tachymeter, pid *controller.PIDController, logger L
 		p95 := float64(metrics.Time.P95) / float64(time.Second)
 		pidOutput := pid.Output(p95)
 		logger.LogControlLoop(p50, p95, pidOutput)
-	}
-}
-
-// Loads environment variables.
-func loadConfig() *config {
-	fp := os.Getenv("FE_PORT")
-	if fp == "" {
-		log.Fatal("FE_PORT env var is missing.")
-	}
-
-	bp := os.Getenv("BE_PORT")
-	if bp == "" {
-		log.Fatal("BE_PORT env var is missing.")
-	}
-
-	envWindow := os.Getenv("NUM_REQUESTS_WINDOW")
-	if envWindow == "" {
-		log.Fatal("NUM_REQUESTS_WINDOW env var is missing.")
-	}
-	window, err := strconv.Atoi(envWindow)
-	if err != nil {
-		log.Fatal("NUM_REQUESTS_WINDOW env var cannot be converted to integer.")
-	}
-
-	envSamplePeriod := os.Getenv("CONTROLLER_SAMPLE_PERIOD")
-	if envSamplePeriod == "" {
-		log.Fatal("CONTROLLER_SAMPLE_PERIOD env var is missing.")
-	}
-	samplePeriod, err := strconv.ParseFloat(envSamplePeriod, 64)
-	if err != nil {
-		log.Fatal("CONTROLLER_SAMPLE_PERIOD env var cannot be converted to integer.")
-	}
-
-	envSetpoint := os.Getenv("CONTROLLER_SETPOINT")
-	if envSetpoint == "" {
-		log.Fatal("CONTROLLER_SETPOINT env var is missing.")
-	}
-	setpoint, err := strconv.ParseFloat(envSetpoint, 64)
-	if err != nil {
-		log.Fatal("CONTROLLER_SETPOINT env var cannot be converted to integer.")
-	}
-
-	envKp := os.Getenv("CONTROLLER_KP")
-	if envKp == "" {
-		log.Fatal("CONTROLLER_KP env var is missing.")
-	}
-	Kp, err := strconv.ParseFloat(envKp, 64)
-	if err != nil {
-		log.Fatal("CONTROLLER_KP env var cannot be converted to integer.")
-	}
-
-	envKi := os.Getenv("CONTROLLER_KI")
-	if envKi == "" {
-		log.Fatal("CONTROLLER_KI env var is missing.")
-	}
-	Ki, err := strconv.ParseFloat(envKi, 64)
-	if err != nil {
-		log.Fatal("CONTROLLER_KI env var cannot be converted to integer.")
-	}
-
-	envKd := os.Getenv("CONTROLLER_KD")
-	if envKd == "" {
-		log.Fatal("CONTROLLER_KD env var is missing.")
-	}
-	Kd, err := strconv.ParseFloat(envKd, 64)
-	if err != nil {
-		log.Fatal("CONTROLLER_KD env var cannot be converted to integer.")
-	}
-
-	return &config{
-		frontEndPort:           fp,
-		backEndPort:            bp,
-		requestsWindow:         window,
-		controllerSamplePeriod: samplePeriod,
-		controllerSetpoint:     setpoint,
-		controllerKp:           Kp,
-		controllerKi:           Ki,
-		controllerKd:           Kd,
 	}
 }
