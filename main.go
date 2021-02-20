@@ -22,6 +22,9 @@ type Config struct {
 	controllerKp           float64 `env:"CONTROLLER_KP"`
 	controllerKi           float64 `env:"CONTROLLER_KI"`
 	controllerKd           float64 `env:"CONTROLLER_KD"`
+	logger                 string  `env:"LOGGER"`
+	loggerInfluxDBHost     string  `env:"LOGGER_INFLUXDB_HOST"`
+	loggerInfluxDBToken    string  `env:"LOGGER_INFLUXDB_TOKEN"`
 }
 
 func main() {
@@ -31,6 +34,10 @@ func main() {
 		log.Fatalf("expected err == nil in cleanenv.ReadEnv(); got err = %v", err)
 	}
 
+	logger, err := initLogger(&config)
+	if err != nil {
+		log.Fatalf(err.Error())
+	}
 	tach := tachymeter.New(&tachymeter.Config{Size: config.requestsWindow})
 	pid, err := controller.NewPIDController(
 		controller.NewRealtimeClock(),
@@ -46,7 +53,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("expected controller.NewPIDController() returns nil err; got err = %v", err)
 	}
-	go dimmer(tach, pid, NewStdLogger())
+	go dimmer(tach, pid, logger)
 
 	backendUrl, err := url.Parse("http://localhost:" + config.backEndPort)
 	if err != nil {
@@ -64,6 +71,16 @@ func main() {
 	err = http.ListenAndServe(fmt.Sprintf(":%v", config.frontEndPort), nil)
 	if err != nil {
 		log.Fatalf("Error serving reverse proxy: %v", err)
+	}
+}
+
+func initLogger(config *Config) (Logger, error) {
+	if config.logger == "stdout" {
+		return NewStdLogger(), nil
+	} else if config.logger == "influxdb" {
+		return NewInfluxDBLogger(config.loggerInfluxDBHost, config.loggerInfluxDBToken), nil
+	} else {
+		return nil, fmt.Errorf("expected env var LOGGER one of {stdout, influxdb}; got %s", config.logger)
 	}
 }
 
