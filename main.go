@@ -68,14 +68,14 @@ func main() {
 		dimmingPercentage := pidOutput
 		pidOutputMux.RUnlock()
 
+		startTime := time.Now()
 		if rand.Float64()*100 < dimmingPercentage {
 			http.Error(rw, "dimming", http.StatusTooManyRequests)
 		} else {
-			startTime := time.Now()
 			proxy.ServeHTTP(rw, req)
-			duration := time.Now().Sub(startTime)
-			tach.AddTime(duration)
 		}
+		duration := time.Now().Sub(startTime)
+		tach.AddTime(duration)
 	})
 
 	err = http.ListenAndServe(fmt.Sprintf(":%v", config.FrontEndPort), nil)
