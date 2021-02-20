@@ -16,15 +16,15 @@ import (
 type Config struct {
 	frontEndPort           string  `env:"FE_PORT"`
 	backEndPort            string  `env:"BE_PORT"`
+	loggerDriver           string  `env:"LOGGER_DRIVER"`
+	loggerInfluxDBHost     string  `env:"LOGGER_INFLUXDB_HOST"`
+	loggerInfluxDBToken    string  `env:"LOGGER_INFLUXDB_TOKEN"`
 	requestsWindow         int     `env:"NUM_REQUESTS_WINDOW"`
 	controllerSamplePeriod float64 `env:"CONTROLLER_SAMPLE_PERIOD"`
 	controllerSetpoint     float64 `env:"CONTROLLER_SETPOINT"`
 	controllerKp           float64 `env:"CONTROLLER_KP"`
 	controllerKi           float64 `env:"CONTROLLER_KI"`
 	controllerKd           float64 `env:"CONTROLLER_KD"`
-	loggerDriver           string  `env:"LOGGER_DRIVER"`
-	loggerInfluxDBHost     string  `env:"LOGGER_INFLUXDB_HOST"`
-	loggerInfluxDBToken    string  `env:"LOGGER_INFLUXDB_TOKEN"`
 }
 
 func main() {
