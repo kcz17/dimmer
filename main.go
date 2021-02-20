@@ -34,6 +34,8 @@ func main() {
 		log.Fatalf("expected err == nil in envconfig.Process(); got err = %v", err)
 	}
 
+	fmt.Printf("Loaded config:\n%+v\n", config)
+
 	var logger Logger
 	if config.loggerDriver == "stdout" {
 		logger = NewStdLogger()
