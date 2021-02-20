@@ -14,17 +14,17 @@ import (
 )
 
 type Config struct {
-	frontEndPort           string  `envconfig:"FE_PORT"`
-	backEndPort            string  `envconfig:"BE_PORT"`
-	requestsWindow         int     `envconfig:"NUM_REQUESTS_WINDOW"`
-	controllerSamplePeriod float64 `envconfig:"CONTROLLER_SAMPLE_PERIOD"`
-	controllerSetpoint     float64 `envconfig:"CONTROLLER_SETPOINT"`
-	controllerKp           float64 `envconfig:"CONTROLLER_KP"`
-	controllerKi           float64 `envconfig:"CONTROLLER_KI"`
-	controllerKd           float64 `envconfig:"CONTROLLER_KD"`
-	loggerDriver           string  `envconfig:"LOGGER_DRIVER"`
-	loggerInfluxDBHost     string  `envconfig:"LOGGER_INFLUXDB_HOST"`
-	loggerInfluxDBToken    string  `envconfig:"LOGGER_INFLUXDB_TOKEN"`
+	FrontEndPort           string  `envconfig:"FE_PORT"`
+	BackEndPort            string  `envconfig:"BE_PORT"`
+	RequestsWindow         int     `envconfig:"NUM_REQUESTS_WINDOW"`
+	ControllerSamplePeriod float64 `envconfig:"CONTROLLER_SAMPLE_PERIOD"`
+	ControllerSetpoint     float64 `envconfig:"CONTROLLER_SETPOINT"`
+	ControllerKp           float64 `envconfig:"CONTROLLER_KP"`
+	ControllerKi           float64 `envconfig:"CONTROLLER_KI"`
+	ControllerKd           float64 `envconfig:"CONTROLLER_KD"`
+	LoggerDriver           string  `envconfig:"LOGGER_DRIVER"`
+	LoggerInfluxDBHost     string  `envconfig:"LOGGER_INFLUXDB_HOST"`
+	LoggerInfluxDBToken    string  `envconfig:"LOGGER_INFLUXDB_TOKEN"`
 }
 
 func main() {
@@ -34,35 +34,25 @@ func main() {
 		log.Fatalf("expected err == nil in envconfig.Process(); got err = %v", err)
 	}
 
-	fmt.Printf("Loaded config:\n%+v\n", config)
-
-	var logger Logger
-	if config.loggerDriver == "stdout" {
-		logger = NewStdLogger()
-	} else if config.loggerDriver == "influxdb" {
-		logger = NewInfluxDBLogger(config.loggerInfluxDBHost, config.loggerInfluxDBToken)
-	} else {
-		log.Fatalf("expected env var LOGGER_DRIVER one of {stdout, influxdb}; got %s", config.loggerDriver)
-	}
-
-	tach := tachymeter.New(&tachymeter.Config{Size: config.requestsWindow})
+	logger := initLogger(&config)
+	tach := tachymeter.New(&tachymeter.Config{Size: config.RequestsWindow})
 	pid, err := controller.NewPIDController(
 		controller.NewRealtimeClock(),
-		config.controllerSetpoint,
-		config.controllerKp,
-		config.controllerKi,
-		config.controllerKd,
+		config.ControllerSetpoint,
+		config.ControllerKp,
+		config.ControllerKi,
+		config.ControllerKd,
 		true,
 		0,
 		100,
-		config.controllerSamplePeriod,
+		config.ControllerSamplePeriod,
 	)
 	if err != nil {
 		log.Fatalf("expected controller.NewPIDController() returns nil err; got err = %v", err)
 	}
 	go dimmer(tach, pid, logger)
 
-	backendUrl, err := url.Parse("http://localhost:" + config.backEndPort)
+	backendUrl, err := url.Parse("http://localhost:" + config.BackEndPort)
 	if err != nil {
 		log.Fatalf("Error parsing backend url: %v", err)
 	}
@@ -75,10 +65,22 @@ func main() {
 		tach.AddTime(duration)
 	})
 
-	err = http.ListenAndServe(fmt.Sprintf(":%v", config.frontEndPort), nil)
+	err = http.ListenAndServe(fmt.Sprintf(":%v", config.FrontEndPort), nil)
 	if err != nil {
 		log.Fatalf("Error serving reverse proxy: %v", err)
 	}
+}
+
+func initLogger(config *Config) Logger {
+	var logger Logger
+	if config.LoggerDriver == "stdout" {
+		logger = NewStdLogger()
+	} else if config.LoggerDriver == "influxdb" {
+		logger = NewInfluxDBLogger(config.LoggerInfluxDBHost, config.LoggerInfluxDBToken)
+	} else {
+		log.Fatalf("expected env var LOGGER_DRIVER one of {stdout, influxdb}; got %s", config.LoggerDriver)
+	}
+	return logger
 }
 
 func dimmer(tach *tachymeter.Tachymeter, pid *controller.PIDController, logger Logger) {
