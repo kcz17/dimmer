@@ -34,10 +34,15 @@ func main() {
 		log.Fatalf("expected err == nil in cleanenv.ReadEnv(); got err = %v", err)
 	}
 
-	logger, err := initLogger(&config)
-	if err != nil {
-		log.Fatalf(err.Error())
+	var logger Logger
+	if config.loggerDriver == "stdout" {
+		logger = NewStdLogger()
+	} else if config.loggerDriver == "influxdb" {
+		logger = NewInfluxDBLogger(config.loggerInfluxDBHost, config.loggerInfluxDBToken)
+	} else {
+		log.Fatalf("expected env var LOGGER_DRIVER one of {stdout, influxdb}; got %s", config.loggerDriver)
 	}
+
 	tach := tachymeter.New(&tachymeter.Config{Size: config.requestsWindow})
 	pid, err := controller.NewPIDController(
 		controller.NewRealtimeClock(),
@@ -71,16 +76,6 @@ func main() {
 	err = http.ListenAndServe(fmt.Sprintf(":%v", config.frontEndPort), nil)
 	if err != nil {
 		log.Fatalf("Error serving reverse proxy: %v", err)
-	}
-}
-
-func initLogger(config *Config) (Logger, error) {
-	if config.loggerDriver == "stdout" {
-		return NewStdLogger(), nil
-	} else if config.loggerDriver == "influxdb" {
-		return NewInfluxDBLogger(config.loggerInfluxDBHost, config.loggerInfluxDBToken), nil
-	} else {
-		return nil, fmt.Errorf("expected env var LOGGER_DRIVER one of {stdout, influxdb}; got %+v", config.loggerDriver)
 	}
 }
 
