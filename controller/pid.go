@@ -22,7 +22,7 @@ type PIDController struct {
 
 func NewPIDController(clock Clock, setpoint float64, kp float64, ki float64, kd float64, isReversed bool, minOutput float64, maxOutput float64, minSampleTime float64) (*PIDController, error) {
 	if kp < 0 || ki < 0 || kd < 0 {
-		errors.New("expected positive controller parameters; got negative (toggle isReversed instead)")
+		return nil, errors.New("expected positive controller parameters; got negative (toggle isReversed instead)")
 	}
 
 	// If reversed, then a positive error (setpoint - input) will decrease
