@@ -22,7 +22,7 @@ type Config struct {
 	controllerKp           float64 `env:"CONTROLLER_KP"`
 	controllerKi           float64 `env:"CONTROLLER_KI"`
 	controllerKd           float64 `env:"CONTROLLER_KD"`
-	logger                 string  `env:"LOGGER"`
+	loggerDriver           string  `env:"LOGGER_DRIVER"`
 	loggerInfluxDBHost     string  `env:"LOGGER_INFLUXDB_HOST"`
 	loggerInfluxDBToken    string  `env:"LOGGER_INFLUXDB_TOKEN"`
 }
@@ -75,12 +75,12 @@ func main() {
 }
 
 func initLogger(config *Config) (Logger, error) {
-	if config.logger == "stdout" {
+	if config.loggerDriver == "stdout" {
 		return NewStdLogger(), nil
-	} else if config.logger == "influxdb" {
+	} else if config.loggerDriver == "influxdb" {
 		return NewInfluxDBLogger(config.loggerInfluxDBHost, config.loggerInfluxDBToken), nil
 	} else {
-		return nil, fmt.Errorf("expected env var LOGGER one of {stdout, influxdb}; got %s", config.logger)
+		return nil, fmt.Errorf("expected env var LOGGER_DRIVER one of {stdout, influxdb}; got %+v", config.loggerDriver)
 	}
 }
 
