@@ -46,7 +46,7 @@ func main() {
 		config.ControllerKd,
 		true,
 		0,
-		100,
+		99,
 		config.ControllerSamplePeriod,
 	)
 	if err != nil {
