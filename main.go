@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"github.com/kcz17/dimmer/controller"
 	"log"
+	"math/rand"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/jamiealquiza/tachymeter"
@@ -50,7 +52,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("expected controller.NewPIDController() returns nil err; got err = %v", err)
 	}
-	go dimmer(tach, pid, logger)
+
+	pidOutputMux := &sync.RWMutex{}
+	pidOutput := 0.0
+	go dimmer(tach, pid, logger, &pidOutput, pidOutputMux)
 
 	backendUrl, err := url.Parse("http://localhost:" + config.BackEndPort)
 	if err != nil {
@@ -59,10 +64,18 @@ func main() {
 
 	proxy := httputil.NewSingleHostReverseProxy(backendUrl)
 	http.HandleFunc("/", func(rw http.ResponseWriter, req *http.Request) {
-		startTime := time.Now()
-		proxy.ServeHTTP(rw, req)
-		duration := time.Now().Sub(startTime)
-		tach.AddTime(duration)
+		pidOutputMux.RLock()
+		dimmingPercentage := pidOutput
+		pidOutputMux.RUnlock()
+
+		if rand.Float64()*100 < dimmingPercentage {
+			http.Error(rw, "dimming", http.StatusTooManyRequests)
+		} else {
+			startTime := time.Now()
+			proxy.ServeHTTP(rw, req)
+			duration := time.Now().Sub(startTime)
+			tach.AddTime(duration)
+		}
 	})
 
 	err = http.ListenAndServe(fmt.Sprintf(":%v", config.FrontEndPort), nil)
@@ -83,7 +96,7 @@ func initLogger(config *Config) Logger {
 	return logger
 }
 
-func dimmer(tach *tachymeter.Tachymeter, pid *controller.PIDController, logger Logger) {
+func dimmer(tach *tachymeter.Tachymeter, pid *controller.PIDController, logger Logger, dimmingPercentage *float64, dimmingPercentageMux *sync.RWMutex) {
 	for range time.Tick(time.Second * 1) {
 		metrics := tach.Calc()
 
@@ -92,5 +105,10 @@ func dimmer(tach *tachymeter.Tachymeter, pid *controller.PIDController, logger L
 		p95 := float64(metrics.Time.P95) / float64(time.Second)
 		pidOutput := pid.Output(p95)
 		logger.LogControlLoop(p50, p95, pidOutput)
+
+		// Apply the PID output.
+		dimmingPercentageMux.Lock()
+		*dimmingPercentage = pidOutput
+		dimmingPercentageMux.Unlock()
 	}
 }
