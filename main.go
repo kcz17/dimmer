@@ -9,29 +9,29 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/jamiealquiza/tachymeter"
+	"github.com/kelseyhightower/envconfig"
 )
 
 type Config struct {
-	frontEndPort           string  `env:"FE_PORT"`
-	backEndPort            string  `env:"BE_PORT"`
-	loggerDriver           string  `env:"LOGGER_DRIVER"`
-	loggerInfluxDBHost     string  `env:"LOGGER_INFLUXDB_HOST"`
-	loggerInfluxDBToken    string  `env:"LOGGER_INFLUXDB_TOKEN"`
-	requestsWindow         int     `env:"NUM_REQUESTS_WINDOW"`
-	controllerSamplePeriod float64 `env:"CONTROLLER_SAMPLE_PERIOD"`
-	controllerSetpoint     float64 `env:"CONTROLLER_SETPOINT"`
-	controllerKp           float64 `env:"CONTROLLER_KP"`
-	controllerKi           float64 `env:"CONTROLLER_KI"`
-	controllerKd           float64 `env:"CONTROLLER_KD"`
+	frontEndPort           string  `envconfig:"FE_PORT"`
+	backEndPort            string  `envconfig:"BE_PORT"`
+	requestsWindow         int     `envconfig:"NUM_REQUESTS_WINDOW"`
+	controllerSamplePeriod float64 `envconfig:"CONTROLLER_SAMPLE_PERIOD"`
+	controllerSetpoint     float64 `envconfig:"CONTROLLER_SETPOINT"`
+	controllerKp           float64 `envconfig:"CONTROLLER_KP"`
+	controllerKi           float64 `envconfig:"CONTROLLER_KI"`
+	controllerKd           float64 `envconfig:"CONTROLLER_KD"`
+	loggerDriver           string  `envconfig:"LOGGER_DRIVER"`
+	loggerInfluxDBHost     string  `envconfig:"LOGGER_INFLUXDB_HOST"`
+	loggerInfluxDBToken    string  `envconfig:"LOGGER_INFLUXDB_TOKEN"`
 }
 
 func main() {
 	var config Config
-	err := cleanenv.ReadEnv(&config)
+	err := envconfig.Process("", &config)
 	if err != nil {
-		log.Fatalf("expected err == nil in cleanenv.ReadEnv(); got err = %v", err)
+		log.Fatalf("expected err == nil in envconfig.Process(); got err = %v", err)
 	}
 
 	var logger Logger
