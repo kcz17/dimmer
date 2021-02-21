@@ -11,27 +11,28 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/jamiealquiza/tachymeter"
-	"github.com/kelseyhightower/envconfig"
 )
 
 type Config struct {
-	FrontEndPort           string  `envconfig:"FE_PORT"`
-	BackEndPort            string  `envconfig:"BE_PORT"`
-	RequestsWindow         int     `envconfig:"NUM_REQUESTS_WINDOW"`
-	ControllerSamplePeriod float64 `envconfig:"CONTROLLER_SAMPLE_PERIOD"`
-	ControllerSetpoint     float64 `envconfig:"CONTROLLER_SETPOINT"`
-	ControllerKp           float64 `envconfig:"CONTROLLER_KP"`
-	ControllerKi           float64 `envconfig:"CONTROLLER_KI"`
-	ControllerKd           float64 `envconfig:"CONTROLLER_KD"`
-	LoggerDriver           string  `envconfig:"LOGGER_DRIVER"`
-	LoggerInfluxDBHost     string  `envconfig:"LOGGER_INFLUXDB_HOST"`
-	LoggerInfluxDBToken    string  `envconfig:"LOGGER_INFLUXDB_TOKEN"`
+	FrontEndPort           string  `env:"FE_PORT"`
+	BackEndPort            string  `env:"BE_PORT"`
+	RequestsWindow         int     `env:"NUM_REQUESTS_WINDOW"`
+	ControllerIsEnabled    bool    `env:"CONTROLLER_ENABLED" env-default:"true"`
+	ControllerSamplePeriod float64 `env:"CONTROLLER_SAMPLE_PERIOD"`
+	ControllerSetpoint     float64 `env:"CONTROLLER_SETPOINT"`
+	ControllerKp           float64 `env:"CONTROLLER_KP"`
+	ControllerKi           float64 `env:"CONTROLLER_KI"`
+	ControllerKd           float64 `env:"CONTROLLER_KD"`
+	LoggerDriver           string  `env:"LOGGER_DRIVER"`
+	LoggerInfluxDBHost     string  `env:"LOGGER_INFLUXDB_HOST"`
+	LoggerInfluxDBToken    string  `env:"LOGGER_INFLUXDB_TOKEN"`
 }
 
 func main() {
 	var config Config
-	err := envconfig.Process("", &config)
+	err := cleanenv.ReadEnv(&config)
 	if err != nil {
 		log.Fatalf("expected err == nil in envconfig.Process(); got err = %v", err)
 	}
@@ -68,12 +69,13 @@ func main() {
 		dimmingPercentage := pidOutput
 		pidOutputMux.RUnlock()
 
-		startTime := time.Now()
 		if rand.Float64()*100 < dimmingPercentage {
 			http.Error(rw, "dimming", http.StatusTooManyRequests)
-		} else {
-			proxy.ServeHTTP(rw, req)
+			return
 		}
+
+		startTime := time.Now()
+		proxy.ServeHTTP(rw, req)
 		duration := time.Now().Sub(startTime)
 		tach.AddTime(duration)
 	})
