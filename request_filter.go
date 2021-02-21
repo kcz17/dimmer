@@ -2,13 +2,11 @@ package main
 
 import "net/http"
 
+// Rule is formatted by "[METHOD] [PATH]".
+type Rule = string
+
 type RequestFilter struct {
 	rules map[Rule]bool // Set of rules to compare against.
-}
-
-type Rule struct {
-	Path   string
-	Method string
 }
 
 func NewRequestFilter() *RequestFilter {
@@ -16,13 +14,15 @@ func NewRequestFilter() *RequestFilter {
 }
 
 func (r *RequestFilter) Matches(path string, method string) bool {
-	path = prependLeadingSlashIfMissing(path)
-	return r.rules[Rule{Path: path, Method: method}] == true
+	return r.rules[toRule(path, method)] == true
 }
 
+// AddPath adds rules a given path and method both inclusive and exclusive of
+// the path's leading slash.
 func (r *RequestFilter) AddPath(path string, method string) {
 	path = prependLeadingSlashIfMissing(path)
-	r.rules[Rule{Path: path, Method: method}] = true
+	r.rules[toRule(path[1:], method)] = true
+	r.rules[toRule(path, method)] = true
 }
 
 func (r *RequestFilter) AddPathForAllMethods(path string) {
@@ -37,4 +37,8 @@ func prependLeadingSlashIfMissing(path string) string {
 		path = "/" + path
 	}
 	return path
+}
+
+func toRule(path string, method string) Rule {
+	return method + " " + path
 }

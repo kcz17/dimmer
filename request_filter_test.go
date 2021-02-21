@@ -46,10 +46,8 @@ func Test_prependLeadingSlashIfMissing(t *testing.T) {
 
 func TestRequestFilter_Matches(t *testing.T) {
 	rules := map[Rule]bool{
-		Rule{
-			Path:   "/path",
-			Method: http.MethodGet,
-		}: true,
+		toRule("/path", http.MethodGet): true,
+		toRule("path", http.MethodGet):  true,
 	}
 	type fields struct {
 		rules map[Rule]bool
