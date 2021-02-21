@@ -106,6 +106,7 @@ func initRequestFilter() *RequestFilter {
 	filter.AddPathForAllMethods("recommender")
 	filter.AddPathForAllMethods("news.html")
 	filter.AddPathForAllMethods("news")
+	filter.AddPathForAllMethods("cart")
 	return filter
 }
 
