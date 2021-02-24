@@ -64,9 +64,12 @@ func (c *PIDController) Output(input float64) float64 {
 
 	c.integral += c.ki * err * elapsed
 
+	// Prevent division by zero if control loop not yet made.
 	var d float64
 	if elapsed != 0 {
 		d = c.kd * -((input - c.lastInput) / elapsed)
+	} else {
+		d = 0
 	}
 
 	output := p + c.integral + d
@@ -75,6 +78,9 @@ func (c *PIDController) Output(input float64) float64 {
 	} else if output < c.minOutput {
 		output = c.minOutput
 	}
+
+	// Anti-windup to ensure the integral value does not diverge.
+	c.integral = output - d - p
 
 	// Save calculations for the next loop.
 	c.lastTick = now

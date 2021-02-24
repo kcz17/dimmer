@@ -19,7 +19,7 @@ type Config struct {
 	FrontEndPort           string  `env:"FE_PORT"`
 	BackEndPort            string  `env:"BE_PORT"`
 	RequestsWindow         int     `env:"NUM_REQUESTS_WINDOW"`
-	IsDimmingEnabled       bool    `env:"DIMMER_ENABLED" env-default:"true"`
+	IsDimmerEnabled        bool    `env:"DIMMER_ENABLED"`
 	ControllerSamplePeriod float64 `env:"CONTROLLER_SAMPLE_PERIOD"`
 	ControllerSetpoint     float64 `env:"CONTROLLER_SETPOINT"`
 	ControllerKp           float64 `env:"CONTROLLER_KP"`
@@ -66,7 +66,7 @@ func main() {
 
 	proxy := httputil.NewSingleHostReverseProxy(backendUrl)
 	http.HandleFunc("/", func(rw http.ResponseWriter, req *http.Request) {
-		if config.IsDimmingEnabled && requestFilter.Matches(req.URL.Path, req.Method) {
+		if config.IsDimmerEnabled && requestFilter.Matches(req.URL.Path, req.Method) {
 			controllerOutputMux.RLock()
 			dimmingPercentage := controllerOutput
 			controllerOutputMux.RUnlock()
