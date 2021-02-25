@@ -36,8 +36,8 @@ func main() {
 	err := cleanenv.ReadEnv(&config)
 	if err != nil {
 		log.Fatalf("expected err == nil in envconfig.Process(); got err = %v", err)
-	} else if config.ControllerPercentile != "p50" && config.ControllerPercentile != "p75" && config.ControllerPercentile != "p90" && config.ControllerPercentile != "p95" {
-		log.Fatalf("expected enviornment variable CONTROLLER_PERCENTILE to be one of {p50|p75|p90|p95}; got %s", config.ControllerPercentile)
+	} else if config.ControllerPercentile != "p50" && config.ControllerPercentile != "p75" && config.ControllerPercentile != "p95" {
+		log.Fatalf("expected enviornment variable CONTROLLER_PERCENTILE to be one of {p50|p75|p95}; got %s", config.ControllerPercentile)
 	}
 
 	requestFilter := initRequestFilter()
@@ -120,17 +120,14 @@ func controlLoop(tach *tachymeter.Tachymeter, pid *controller.PIDController, log
 		// PID controller and logger operate with seconds.
 		p50 := float64(metrics.Time.P50) / float64(time.Second)
 		p75 := float64(metrics.Time.P75) / float64(time.Second)
-		p90 := float64(metrics.Time.P95) / float64(time.Second)
 		p95 := float64(metrics.Time.P95) / float64(time.Second)
-		logger.LogResponseTime(p50, p75, p90, p95)
+		logger.LogResponseTime(p50, p75, p95)
 
 		var pidOutput float64
 		if dimmingPercentile == "p50" {
 			pidOutput = pid.Output(p50)
 		} else if dimmingPercentile == "p75" {
 			pidOutput = pid.Output(p75)
-		} else if dimmingPercentile == "p90" {
-			pidOutput = pid.Output(p90)
 		} else if dimmingPercentile == "p95" {
 			pidOutput = pid.Output(p95)
 		} else {

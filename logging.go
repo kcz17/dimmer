@@ -8,7 +8,7 @@ import (
 )
 
 type Logger interface {
-	LogResponseTime(p50 float64, p75 float64, p90 float64, p95 float64) // Takes in percentiles in seconds.
+	LogResponseTime(p50 float64, p75 float64, p95 float64) // Takes in percentiles in seconds.
 	LogDimmerOutput(pidOutput float64)
 	LogPIDControllerState(p float64, i float64, d float64, errorTerm float64)
 }
@@ -20,8 +20,8 @@ func NewStdLogger() *StdLogger {
 	return &StdLogger{}
 }
 
-func (*StdLogger) LogResponseTime(p50 float64, p75 float64, p90 float64, p95 float64) {
-	fmt.Printf("[%s] p50: %.3f, p75: %.3f, p90: %.3f, p95: %.3f\n", time.Now().Format(time.StampMilli), p50, p75, p90, p95)
+func (*StdLogger) LogResponseTime(p50 float64, p75 float64, p95 float64) {
+	fmt.Printf("[%s] p50: %.3f, p75: %.3f, p95: %.3f\n", time.Now().Format(time.StampMilli), p50, p75, p95)
 }
 
 func (*StdLogger) LogDimmerOutput(pidOutput float64) {
@@ -56,11 +56,10 @@ func NewInfluxDBLogger(baseURL string, authToken string) *InfluxDBLogger {
 	}
 }
 
-func (l *InfluxDBLogger) LogResponseTime(p50 float64, p75 float64, p90 float64, p95 float64) {
+func (l *InfluxDBLogger) LogResponseTime(p50 float64, p75 float64, p95 float64) {
 	p := influxdb2.NewPointWithMeasurement("dimmer_response_time").
 		AddField("p50", p50).
 		AddField("p75", p75).
-		AddField("p90", p90).
 		AddField("p95", p95).
 		SetTime(time.Now())
 	l.asyncWriter.WritePoint(p)
