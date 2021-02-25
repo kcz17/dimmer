@@ -62,7 +62,8 @@ func main() {
 	go controlLoop(tach, pid, logger, config.ControllerPercentile, &controllerOutput, controllerOutputMux)
 
 	proxy := &fasthttp.HostClient{
-		Addr: "localhost:" + config.BackEndPort,
+		Addr:     "localhost:" + config.BackEndPort,
+		MaxConns: 2048,
 	}
 
 	if err := fasthttp.ListenAndServe(fmt.Sprintf(":%v", config.FrontEndPort), func(ctx *fasthttp.RequestCtx) {
