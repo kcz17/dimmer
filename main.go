@@ -6,13 +6,12 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"sync"
 	"time"
 
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/jamiealquiza/tachymeter"
+	"github.com/valyala/fasthttp"
 )
 
 type Config struct {
@@ -62,33 +61,43 @@ func main() {
 	controllerOutput := 0.0
 	go controlLoop(tach, pid, logger, config.ControllerPercentile, &controllerOutput, controllerOutputMux)
 
-	backendUrl, err := url.Parse("http://localhost:" + config.BackEndPort)
-	if err != nil {
-		log.Fatalf("Error parsing backend url: %v", err)
+	proxy := &fasthttp.HostClient{
+		Addr: "http://localhost:" + config.BackEndPort,
 	}
 
-	proxy := httputil.NewSingleHostReverseProxy(backendUrl)
-	http.HandleFunc("/", func(rw http.ResponseWriter, req *http.Request) {
-		if config.IsDimmerEnabled && requestFilter.Matches(req.URL.Path, req.Method) {
+	if err := fasthttp.ListenAndServe(fmt.Sprintf(":%v", config.FrontEndPort), func(ctx *fasthttp.RequestCtx) {
+		req := &ctx.Request
+		resp := &ctx.Response
+
+		if config.IsDimmerEnabled && requestFilter.Matches(string(ctx.Path()), string(ctx.Method())) {
 			controllerOutputMux.RLock()
 			dimmingPercentage := controllerOutput
 			controllerOutputMux.RUnlock()
 
 			if rand.Float64()*100 < dimmingPercentage {
-				http.Error(rw, "dimming", http.StatusTooManyRequests)
+				ctx.Error("dimming", http.StatusTooManyRequests)
 				return
 			}
 		}
 
+		// Remove connection header per RFC2616.
+		func(req *fasthttp.Request) {
+			req.Header.Del("Connection")
+		}(req)
+
 		startTime := time.Now()
-		proxy.ServeHTTP(rw, req)
+		if err := proxy.Do(req, resp); err != nil {
+			ctx.Logger().Printf("fasthttp: error when proxying the request: %v", err)
+		}
 		duration := time.Now().Sub(startTime)
 		tach.AddTime(duration)
-	})
 
-	err = http.ListenAndServe(fmt.Sprintf(":%v", config.FrontEndPort), nil)
-	if err != nil {
-		log.Fatalf("Error serving reverse proxy: %v", err)
+		// Remove connection header per RFC2616.
+		func(resp *fasthttp.Response) {
+			resp.Header.Del("Connection")
+		}(resp)
+	}); err != nil {
+		log.Fatalf("fasthttp: server error: %v", err)
 	}
 }
 
