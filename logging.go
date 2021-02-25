@@ -64,7 +64,7 @@ func NewInfluxDBLogger(baseURL string, authToken string) *InfluxDBLogger {
 
 func (l *InfluxDBLogger) LogResponseTime(t float64) {
 	p := influxdb2.NewPointWithMeasurement("dimmer_individual_response_time").
-		AddField("time", t).
+		AddField("t", t).
 		SetTime(time.Now())
 	l.asyncWriter.WritePoint(p)
 }
