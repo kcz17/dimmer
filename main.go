@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,6 +29,7 @@ type Config struct {
 	LoggerDriver           string  `env:"LOGGER_DRIVER"`
 	LoggerInfluxDBHost     string  `env:"LOGGER_INFLUXDB_HOST"`
 	LoggerInfluxDBToken    string  `env:"LOGGER_INFLUXDB_TOKEN"`
+	LoggerExcludeHTML      bool    `env:"LOGGER_EXCLUDE_HTML" env-default:"false"` // Excludes response time capturing for .html files.
 }
 
 func main() {
@@ -62,7 +64,8 @@ func main() {
 	go controlLoop(tach, pid, logger, config.ControllerPercentile, &controllerOutput, controllerOutputMux)
 
 	proxy := &fasthttp.HostClient{
-		Addr: "localhost:" + config.BackEndPort,
+		Addr:     "localhost:" + config.BackEndPort,
+		MaxConns: 2048,
 	}
 
 	if err := fasthttp.ListenAndServe(fmt.Sprintf(":%v", config.FrontEndPort), func(ctx *fasthttp.RequestCtx) {
@@ -90,8 +93,10 @@ func main() {
 			ctx.Logger().Printf("fasthttp: error when proxying the request: %v", err)
 		}
 		duration := time.Now().Sub(startTime)
-		logger.LogResponseTime(float64(duration) / float64(time.Second))
-		tach.AddTime(duration)
+		if !config.LoggerExcludeHTML || !strings.Contains(string(ctx.Path()), ".html") {
+			logger.LogResponseTime(float64(duration) / float64(time.Second))
+			tach.AddTime(duration)
+		}
 
 		// Remove connection header per RFC2616.
 		func(resp *fasthttp.Response) {
