@@ -8,7 +8,8 @@ import (
 )
 
 type Logger interface {
-	LogResponseTime(p50 float64, p75 float64, p95 float64) // Takes in percentiles in seconds.
+	LogResponseTime(t float64)                                       // Takes in response time in seconds.
+	LogAggregateResponseTimes(p50 float64, p75 float64, p95 float64) // Takes in percentiles in seconds.
 	LogDimmerOutput(pidOutput float64)
 	LogPIDControllerState(p float64, i float64, d float64, errorTerm float64)
 }
@@ -20,7 +21,12 @@ func NewStdLogger() *StdLogger {
 	return &StdLogger{}
 }
 
-func (*StdLogger) LogResponseTime(p50 float64, p75 float64, p95 float64) {
+func (*StdLogger) LogResponseTime(_ float64) {
+	// Do not log non-aggregated response times to stdout.
+	return
+}
+
+func (*StdLogger) LogAggregateResponseTimes(p50 float64, p75 float64, p95 float64) {
 	fmt.Printf("[%s] p50: %.3f, p75: %.3f, p95: %.3f\n", time.Now().Format(time.StampMilli), p50, p75, p95)
 }
 
@@ -56,7 +62,14 @@ func NewInfluxDBLogger(baseURL string, authToken string) *InfluxDBLogger {
 	}
 }
 
-func (l *InfluxDBLogger) LogResponseTime(p50 float64, p75 float64, p95 float64) {
+func (l *InfluxDBLogger) LogResponseTime(t float64) {
+	p := influxdb2.NewPointWithMeasurement("dimmer_individual_response_time").
+		AddField("time", t).
+		SetTime(time.Now())
+	l.asyncWriter.WritePoint(p)
+}
+
+func (l *InfluxDBLogger) LogAggregateResponseTimes(p50 float64, p75 float64, p95 float64) {
 	p := influxdb2.NewPointWithMeasurement("dimmer_response_time").
 		AddField("p50", p50).
 		AddField("p75", p75).

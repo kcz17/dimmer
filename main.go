@@ -90,6 +90,7 @@ func main() {
 			ctx.Logger().Printf("fasthttp: error when proxying the request: %v", err)
 		}
 		duration := time.Now().Sub(startTime)
+		logger.LogResponseTime(float64(duration) / float64(time.Second))
 		tach.AddTime(duration)
 
 		// Remove connection header per RFC2616.
@@ -130,7 +131,7 @@ func controlLoop(tach *tachymeter.Tachymeter, pid *controller.PIDController, log
 		p50 := float64(metrics.Time.P50) / float64(time.Second)
 		p75 := float64(metrics.Time.P75) / float64(time.Second)
 		p95 := float64(metrics.Time.P95) / float64(time.Second)
-		logger.LogResponseTime(p50, p75, p95)
+		logger.LogAggregateResponseTimes(p50, p75, p95)
 
 		var pidOutput float64
 		if dimmingPercentile == "p50" {
