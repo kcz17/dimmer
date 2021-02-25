@@ -18,9 +18,10 @@ import (
 type Config struct {
 	FrontEndPort           string  `env:"FE_PORT"`
 	BackEndPort            string  `env:"BE_PORT"`
+	IsDimmerEnabled        bool    `env:"DIMMER_ENABLED" env-default:"true"`
 	RequestsWindow         int     `env:"NUM_REQUESTS_WINDOW"`
-	IsDimmerEnabled        bool    `env:"DIMMER_ENABLED"`
 	ControllerSamplePeriod float64 `env:"CONTROLLER_SAMPLE_PERIOD"`
+	ControllerPercentile   string  `env:"CONTROLLER_PERCENTILE" env-default:"p75"`
 	ControllerSetpoint     float64 `env:"CONTROLLER_SETPOINT"`
 	ControllerKp           float64 `env:"CONTROLLER_KP"`
 	ControllerKi           float64 `env:"CONTROLLER_KI"`
@@ -35,6 +36,8 @@ func main() {
 	err := cleanenv.ReadEnv(&config)
 	if err != nil {
 		log.Fatalf("expected err == nil in envconfig.Process(); got err = %v", err)
+	} else if config.ControllerPercentile != "p50" && config.ControllerPercentile != "p75" && config.ControllerPercentile != "p90" && config.ControllerPercentile != "p95" {
+		log.Fatalf("expected enviornment variable CONTROLLER_PERCENTILE to be one of {p50|p75|p90|p95}; got %s", config.ControllerPercentile)
 	}
 
 	requestFilter := initRequestFilter()
@@ -57,7 +60,7 @@ func main() {
 
 	controllerOutputMux := &sync.RWMutex{}
 	controllerOutput := 0.0
-	go controlLoop(tach, pid, logger, &controllerOutput, controllerOutputMux)
+	go controlLoop(tach, pid, logger, config.ControllerPercentile, &controllerOutput, controllerOutputMux)
 
 	backendUrl, err := url.Parse("http://localhost:" + config.BackEndPort)
 	if err != nil {
@@ -110,15 +113,31 @@ func initRequestFilter() *RequestFilter {
 	return filter
 }
 
-func controlLoop(tach *tachymeter.Tachymeter, pid *controller.PIDController, logger Logger, dimmingPercentage *float64, dimmingPercentageMux *sync.RWMutex) {
+func controlLoop(tach *tachymeter.Tachymeter, pid *controller.PIDController, logger Logger, dimmingPercentile string, dimmingPercentage *float64, dimmingPercentageMux *sync.RWMutex) {
 	for range time.Tick(time.Second * 1) {
 		metrics := tach.Calc()
 
 		// PID controller and logger operate with seconds.
 		p50 := float64(metrics.Time.P50) / float64(time.Second)
+		p75 := float64(metrics.Time.P75) / float64(time.Second)
+		p90 := float64(metrics.Time.P95) / float64(time.Second)
 		p95 := float64(metrics.Time.P95) / float64(time.Second)
-		pidOutput := pid.Output(p95)
-		logger.LogControlLoop(p50, p95, pidOutput)
+		logger.LogResponseTime(p50, p75, p90, p95)
+
+		var pidOutput float64
+		if dimmingPercentile == "p50" {
+			pidOutput = pid.Output(p50)
+		} else if dimmingPercentile == "p75" {
+			pidOutput = pid.Output(p75)
+		} else if dimmingPercentile == "p90" {
+			pidOutput = pid.Output(p90)
+		} else if dimmingPercentile == "p95" {
+			pidOutput = pid.Output(p95)
+		} else {
+			log.Fatalf("controlLoop() expected dimmingPercentile to be one of {50|75|90|95}; got %s", dimmingPercentile)
+		}
+		logger.LogDimmerOutput(pidOutput)
+		logger.LogPIDControllerState(pid.DebugP, pid.DebugI, pid.DebugD, pid.DebugErr)
 
 		// Apply the PID output.
 		dimmingPercentageMux.Lock()

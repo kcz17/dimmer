@@ -8,7 +8,9 @@ import (
 )
 
 type Logger interface {
-	LogControlLoop(p50 float64, p95 float64, pidOutput float64) // LogControlLoop takes in percentiles in seconds.
+	LogResponseTime(p50 float64, p75 float64, p90 float64, p95 float64) // Takes in percentiles in seconds.
+	LogDimmerOutput(pidOutput float64)
+	LogPIDControllerState(p float64, i float64, d float64, errorTerm float64)
 }
 
 // StdLogger logs the output to standard output.
@@ -18,8 +20,16 @@ func NewStdLogger() *StdLogger {
 	return &StdLogger{}
 }
 
-func (*StdLogger) LogControlLoop(p50 float64, p95 float64, pidOutput float64) {
-	fmt.Printf("[%s] p50: %.3f, p95: %.3f, dimming: %.2f%%\n", time.Now().Format(time.StampMilli), p50, p95, pidOutput)
+func (*StdLogger) LogResponseTime(p50 float64, p75 float64, p90 float64, p95 float64) {
+	fmt.Printf("[%s] p50: %.3f, p75: %.3f, p90: %.3f, p95: %.3f\n", time.Now().Format(time.StampMilli), p50, p75, p90, p95)
+}
+
+func (*StdLogger) LogDimmerOutput(pidOutput float64) {
+	fmt.Printf("[%s] dimmer output: %.2f%%\n", time.Now().Format(time.StampMilli), pidOutput)
+}
+
+func (*StdLogger) LogPIDControllerState(p float64, i float64, d float64, errorTerm float64) {
+	fmt.Printf("[%s] p: %.3f, i: %.3f, d: %.3f, e(t): %.3f\n", time.Now().Format(time.StampMilli), p, i, d, errorTerm)
 }
 
 // InfluxDBLogger logs the output to an external InfluxDB instance.
@@ -46,11 +56,29 @@ func NewInfluxDBLogger(baseURL string, authToken string) *InfluxDBLogger {
 	}
 }
 
-func (l *InfluxDBLogger) LogControlLoop(p50 float64, p95 float64, pidOutput float64) {
-	p := influxdb2.NewPointWithMeasurement("loop").
+func (l *InfluxDBLogger) LogResponseTime(p50 float64, p75 float64, p90 float64, p95 float64) {
+	p := influxdb2.NewPointWithMeasurement("dimmer_response_time").
 		AddField("p50", p50).
+		AddField("p75", p75).
+		AddField("p90", p90).
 		AddField("p95", p95).
-		AddField("pid_output", pidOutput).
 		SetTime(time.Now())
 	l.asyncWriter.WritePoint(p)
+}
+
+func (l *InfluxDBLogger) LogDimmerOutput(pidOutput float64) {
+	p := influxdb2.NewPointWithMeasurement("dimmer_output").
+		AddField("output", pidOutput).
+		SetTime(time.Now())
+	l.asyncWriter.WritePoint(p)
+}
+
+func (l *InfluxDBLogger) LogPIDControllerState(p float64, i float64, d float64, errorTerm float64) {
+	point := influxdb2.NewPointWithMeasurement("dimmer_pid_controller_state").
+		AddField("p", p).
+		AddField("i", i).
+		AddField("d", d).
+		AddField("e_t", errorTerm).
+		SetTime(time.Now())
+	l.asyncWriter.WritePoint(point)
 }

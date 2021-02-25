@@ -18,6 +18,10 @@ type PIDController struct {
 	lastTick      time.Time // Used to scale differential and integral terms and to enforce minSampleTime.
 	lastInput     float64   // Used to calculate the differential term.
 	integral      float64   // Running integral term for PID calculation.
+	DebugP        float64   // P value calculated during loop, accessible for debug purposes.
+	DebugI        float64   // I value calculated during loop, accessible for debug purposes.
+	DebugD        float64   // D value calculated during loop, accessible for debug purposes.
+	DebugErr      float64   // Error term calculated during loop, accessible for debug purposes.
 }
 
 func NewPIDController(clock Clock, setpoint float64, kp float64, ki float64, kd float64, isReversed bool, minOutput float64, maxOutput float64, minSampleTime float64) (*PIDController, error) {
@@ -59,10 +63,14 @@ func (c *PIDController) Output(input float64) float64 {
 	}
 
 	// Calculate PID terms.
-	err := c.setpoint - input
-	p := c.kp * err
+	errorTerm := c.setpoint - input
+	c.DebugErr = errorTerm
 
-	c.integral += c.ki * err * elapsed
+	p := c.kp * errorTerm
+	c.DebugP = p
+
+	c.integral += c.ki * errorTerm * elapsed
+	c.DebugI = c.integral
 
 	// Prevent division by zero if control loop not yet made.
 	var d float64
@@ -71,6 +79,7 @@ func (c *PIDController) Output(input float64) float64 {
 	} else {
 		d = 0
 	}
+	c.DebugD = d
 
 	output := p + c.integral + d
 	if output > c.maxOutput {
