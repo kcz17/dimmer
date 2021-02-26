@@ -45,7 +45,11 @@ type InfluxDBLogger struct {
 }
 
 func NewInfluxDBLogger(baseURL string, authToken string) *InfluxDBLogger {
-	client := influxdb2.NewClient(baseURL, authToken)
+	options := influxdb2.DefaultOptions()
+	options.WriteOptions().SetBatchSize(1000)
+	options.WriteOptions().SetFlushInterval(250)
+
+	client := influxdb2.NewClientWithOptions(baseURL, authToken, options)
 	writeAPI := client.WriteAPI("kcz17", "dimmer")
 
 	// Create a goroutine for reading and logging async write errors.
