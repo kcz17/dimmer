@@ -17,6 +17,7 @@ import (
 
 type Config struct {
 	FrontEndPort           string  `env:"FE_PORT"`
+	BackEndHost            string  `env:"BE_HOST" env-default:"localhost"`
 	BackEndPort            string  `env:"BE_PORT"`
 	IsDimmerEnabled        bool    `env:"DIMMER_ENABLED" env-default:"true"`
 	RequestsWindow         int     `env:"NUM_REQUESTS_WINDOW"`
@@ -64,7 +65,7 @@ func main() {
 	go controlLoop(tach, pid, logger, config.ControllerPercentile, &controllerOutput, controllerOutputMux)
 
 	proxy := &fasthttp.HostClient{
-		Addr:     "localhost:" + config.BackEndPort,
+		Addr:     config.BackEndHost + ":" + config.BackEndPort,
 		MaxConns: 2048,
 	}
 
