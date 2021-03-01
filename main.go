@@ -73,7 +73,7 @@ func main() {
 		req := &ctx.Request
 		resp := &ctx.Response
 
-		if config.IsDimmerEnabled && requestFilter.Matches(string(ctx.Path()), string(ctx.Method())) {
+		if config.IsDimmerEnabled && requestFilter.Matches(string(ctx.Path()), string(ctx.Method()), string(req.Header.Referer())) {
 			controllerOutputMux.RLock()
 			dimmingPercentage := controllerOutput
 			controllerOutputMux.RUnlock()
@@ -125,7 +125,10 @@ func initRequestFilter() *RequestFilter {
 	filter.AddPathForAllMethods("recommender")
 	filter.AddPathForAllMethods("news.html")
 	filter.AddPathForAllMethods("news")
-	filter.AddPathForAllMethods("cart")
+	filter.AddPath("cart", "GET")
+	if err := filter.AddRefererExclusion("cart", "GET", "basket.html"); err != nil {
+		panic(fmt.Sprintf("expected filter.AddRefererExclusion() returns nil err; got err = %v", err))
+	}
 	return filter
 }
 
