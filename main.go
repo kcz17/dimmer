@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/kcz17/dimmer/controller"
 	"github.com/kcz17/dimmer/logging"
+	"github.com/kcz17/dimmer/monitoring/response_time"
 	"log"
 	"math/rand"
 	"net/http"
@@ -12,7 +13,6 @@ import (
 	"time"
 
 	"github.com/ilyakaznacheev/cleanenv"
-	"github.com/jamiealquiza/tachymeter"
 	"github.com/valyala/fasthttp"
 )
 
@@ -20,6 +20,7 @@ type Config struct {
 	///////////////////////////////////////////////////////////////////////////
 	// Proxying and serving.
 	///////////////////////////////////////////////////////////////////////////
+
 	FrontEndPort string `env:"FE_PORT"`
 	BackEndHost  string `env:"BE_HOST" env-default:"localhost"`
 	BackEndPort  string `env:"BE_PORT"`
@@ -48,14 +49,15 @@ type Config struct {
 	// Response time data collection.
 	///////////////////////////////////////////////////////////////////////////
 
-	// RequestsWindow defines the number of requests used to aggregate response
-	// time metrics. It should be smaller than or equal to the number of
-	// expected requests received during the sample period.
-	RequestsWindow int `env:"NUM_REQUESTS_WINDOW"`
-	// LoggerExcludeHTML excludes response time capturing for .html files. Used
+	// ResponseTimeCollectorRequestsWindow defines the number of requests used
+	// to aggregate response time metrics. It should be smaller than or equal to
+	// the number of expected requests received during the sample period.
+	ResponseTimeCollectorRequestsWindow int `env:"NUM_REQUESTS_WINDOW"`
+
+	// ResponseTimeCollectorExcludesHTML excludes response time capturing for .html files. Used
 	// to ensure that response time calculations are not biased by the low
 	// response times of static files.
-	LoggerExcludeHTML bool `env:"LOGGER_EXCLUDE_HTML" env-default:"false"`
+	ResponseTimeCollectorExcludesHTML bool `env:"LOGGER_EXCLUDE_HTML" env-default:"false"`
 }
 
 func main() {
@@ -69,31 +71,15 @@ func main() {
 
 	requestFilter := initRequestFilter()
 	logger := initLogger(&config)
-	tach := tachymeter.New(&tachymeter.Config{Size: config.RequestsWindow})
-	pid, err := controller.NewPIDController(
-		controller.NewRealtimeClock(),
-		config.ControllerSetpoint,
-		config.ControllerKp,
-		config.ControllerKi,
-		config.ControllerKd,
-		// isReversed is true as we want a positive error (i.e., actual response
-		// time below desired setpoint) to reduce the controller output.
-		true,
-		// minOutput is 0 as we do not want any dimming when the response time
-		// does not violate the desired setpoint.
-		0,
-		// maxOutput is 99 instead of 100 to ensure response times are collected
-		//during "full" dimming even if requests are only made to dimmed components.
-		99,
-		config.ControllerSamplePeriod,
-	)
+	pid, err := initPIDController(&config)
 	if err != nil {
 		log.Fatalf("expected controller.NewPIDController() returns nil err; got err = %v", err)
 	}
+	responseTimeCollector := response_time.NewTachymeterResponseTimeCollector(config.ResponseTimeCollectorRequestsWindow)
 
 	controllerOutputMux := &sync.RWMutex{}
 	controllerOutput := 0.0
-	go controlLoop(tach, pid, logger, config.ControllerPercentile, &controllerOutput, controllerOutputMux)
+	go controlLoop(responseTimeCollector, pid, logger, config.ControllerPercentile, &controllerOutput, controllerOutputMux)
 
 	proxy := &fasthttp.HostClient{
 		Addr:     config.BackEndHost + ":" + config.BackEndPort,
@@ -125,9 +111,9 @@ func main() {
 			ctx.Logger().Printf("fasthttp: error when proxying the request: %v", err)
 		}
 		duration := time.Now().Sub(startTime)
-		if !config.LoggerExcludeHTML || !strings.Contains(string(ctx.Path()), ".html") {
+		if !config.ResponseTimeCollectorExcludesHTML || !strings.Contains(string(ctx.Path()), ".html") {
 			logger.LogResponseTime(float64(duration) / float64(time.Second))
-			tach.AddTime(duration)
+			responseTimeCollector.Add(duration)
 		}
 
 		// Remove connection header per RFC2616.
@@ -165,8 +151,28 @@ func initRequestFilter() *RequestFilter {
 	return filter
 }
 
+func initPIDController(config *Config) (*controller.PIDController, error) {
+	return controller.NewPIDController(
+		controller.NewRealtimeClock(),
+		config.ControllerSetpoint,
+		config.ControllerKp,
+		config.ControllerKi,
+		config.ControllerKd,
+		// isReversed is true as we want a positive error (i.e., actual response
+		// time below desired setpoint) to reduce the controller output.
+		true,
+		// minOutput is 0 as we do not want any dimming when the response time
+		// does not violate the desired setpoint.
+		0,
+		// maxOutput is 99 instead of 100 to ensure response times are collected
+		//during "full" dimming even if requests are only made to dimmed components.
+		99,
+		config.ControllerSamplePeriod,
+	)
+}
+
 func controlLoop(
-	tach *tachymeter.Tachymeter,
+	responseTimes response_time.ResponseTimeCollector,
 	pid *controller.PIDController,
 	logger logging.Logger,
 	dimmingPercentile string,
@@ -174,12 +180,12 @@ func controlLoop(
 	dimmingPercentageMux *sync.RWMutex,
 ) {
 	for range time.Tick(time.Second * 1) {
-		metrics := tach.Calc()
+		aggregation := responseTimes.Aggregate()
 
 		// PID controller and logger operate with seconds.
-		p50 := float64(metrics.Time.P50) / float64(time.Second)
-		p75 := float64(metrics.Time.P75) / float64(time.Second)
-		p95 := float64(metrics.Time.P95) / float64(time.Second)
+		p50 := float64(aggregation.P50) / float64(time.Second)
+		p75 := float64(aggregation.P75) / float64(time.Second)
+		p95 := float64(aggregation.P95) / float64(time.Second)
 		logger.LogAggregateResponseTimes(p50, p75, p95)
 
 		var pidOutput float64
@@ -190,7 +196,7 @@ func controlLoop(
 		} else if dimmingPercentile == "p95" {
 			pidOutput = pid.Output(p95)
 		} else {
-			log.Fatalf("controlLoop() expected dimmingPercentile to be one of {50|75|90|95}; got %s", dimmingPercentile)
+			log.Fatalf("controlLoop() expected dimmingPercentile to be one of {50|75|95}; got %s", dimmingPercentile)
 		}
 		logger.LogDimmerOutput(pidOutput)
 		logger.LogPIDControllerState(pid.DebugP, pid.DebugI, pid.DebugD, pid.DebugErr)
