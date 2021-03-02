@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/kcz17/dimmer/controller"
 	"github.com/kcz17/dimmer/logging"
-	"github.com/kcz17/dimmer/monitoring/response_time"
+	"github.com/kcz17/dimmer/monitoring/responsetime"
 	"log"
 	"math/rand"
 	"net/http"
@@ -68,7 +68,7 @@ func main() {
 
 	logger := initLogger(&config)
 	requestFilter := initRequestFilter()
-	responseTimeCollector := response_time.NewTachymeterResponseTimeCollector(config.ResponseTimeCollectorRequestsWindow)
+	responseTimeCollector := responsetime.NewTachymeterCollector(config.ResponseTimeCollectorRequestsWindow)
 	controlLoop := initControlLoop(&config, initPIDController(&config), responseTimeCollector, logger)
 
 	proxy := &fasthttp.HostClient{
@@ -172,7 +172,7 @@ func initPIDController(config *Config) *controller.PIDController {
 func initControlLoop(
 	config *Config,
 	pid *controller.PIDController,
-	responseTimeCollector response_time.ResponseTimeCollector,
+	responseTimeCollector responsetime.Collector,
 	logger logging.Logger,
 ) *DimmerControlLoop {
 	if config.ControllerPercentile != "p50" && config.ControllerPercentile != "p75" && config.ControllerPercentile != "p95" {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/kcz17/dimmer/controller"
 	"github.com/kcz17/dimmer/logging"
-	"github.com/kcz17/dimmer/monitoring/response_time"
+	"github.com/kcz17/dimmer/monitoring/responsetime"
 	"sync"
 	"time"
 )
@@ -20,7 +20,7 @@ const (
 type DimmerControlLoop struct {
 	pid *controller.PIDController
 	// responseTimeCollector calculates the input to the PID controller.
-	responseTimeCollector response_time.ResponseTimeCollector
+	responseTimeCollector responsetime.Collector
 	// responseTimePercentile is the response time percentile the dimmer will
 	// pass to the PID controller as input.
 	responseTimePercentile string
@@ -33,7 +33,7 @@ type DimmerControlLoop struct {
 
 func StartNewDimmerControlLoop(
 	pid *controller.PIDController,
-	responseTimeCollector response_time.ResponseTimeCollector,
+	responseTimeCollector responsetime.Collector,
 	responseTimePercentile string,
 	logger logging.Logger,
 ) (*DimmerControlLoop, error) {
