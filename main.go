@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/kcz17/dimmer/controller"
+	"github.com/kcz17/dimmer/logging"
 	"log"
 	"math/rand"
 	"net/http"
@@ -16,21 +17,45 @@ import (
 )
 
 type Config struct {
-	FrontEndPort           string  `env:"FE_PORT"`
-	BackEndHost            string  `env:"BE_HOST" env-default:"localhost"`
-	BackEndPort            string  `env:"BE_PORT"`
+	///////////////////////////////////////////////////////////////////////////
+	// Proxying and serving.
+	///////////////////////////////////////////////////////////////////////////
+	FrontEndPort string `env:"FE_PORT"`
+	BackEndHost  string `env:"BE_HOST" env-default:"localhost"`
+	BackEndPort  string `env:"BE_PORT"`
+
+	///////////////////////////////////////////////////////////////////////////
+	// Logging.
+	///////////////////////////////////////////////////////////////////////////
+
+	LoggerDriver        string `env:"LOGGER_DRIVER" env-default:"noop"`
+	LoggerInfluxDBHost  string `env:"LOGGER_INFLUXDB_HOST"`
+	LoggerInfluxDBToken string `env:"LOGGER_INFLUXDB_TOKEN"`
+
+	///////////////////////////////////////////////////////////////////////////
+	// General dimming.
+	///////////////////////////////////////////////////////////////////////////
+
 	IsDimmerEnabled        bool    `env:"DIMMER_ENABLED" env-default:"true"`
-	RequestsWindow         int     `env:"NUM_REQUESTS_WINDOW"`
 	ControllerSamplePeriod float64 `env:"CONTROLLER_SAMPLE_PERIOD"`
-	ControllerPercentile   string  `env:"CONTROLLER_PERCENTILE" env-default:"p75"`
+	ControllerPercentile   string  `env:"CONTROLLER_PERCENTILE" env-default:"p95"`
 	ControllerSetpoint     float64 `env:"CONTROLLER_SETPOINT"`
 	ControllerKp           float64 `env:"CONTROLLER_KP"`
 	ControllerKi           float64 `env:"CONTROLLER_KI"`
 	ControllerKd           float64 `env:"CONTROLLER_KD"`
-	LoggerDriver           string  `env:"LOGGER_DRIVER"`
-	LoggerInfluxDBHost     string  `env:"LOGGER_INFLUXDB_HOST"`
-	LoggerInfluxDBToken    string  `env:"LOGGER_INFLUXDB_TOKEN"`
-	LoggerExcludeHTML      bool    `env:"LOGGER_EXCLUDE_HTML" env-default:"false"` // Excludes response time capturing for .html files.
+
+	///////////////////////////////////////////////////////////////////////////
+	// Response time data collection.
+	///////////////////////////////////////////////////////////////////////////
+
+	// RequestsWindow defines the number of requests used to aggregate response
+	// time metrics. It should be smaller than or equal to the number of
+	// expected requests received during the sample period.
+	RequestsWindow int `env:"NUM_REQUESTS_WINDOW"`
+	// LoggerExcludeHTML excludes response time capturing for .html files. Used
+	// to ensure that response time calculations are not biased by the low
+	// response times of static files.
+	LoggerExcludeHTML bool `env:"LOGGER_EXCLUDE_HTML" env-default:"false"`
 }
 
 func main() {
@@ -51,8 +76,14 @@ func main() {
 		config.ControllerKp,
 		config.ControllerKi,
 		config.ControllerKd,
+		// isReversed is true as we want a positive error (i.e., actual response
+		// time below desired setpoint) to reduce the controller output.
 		true,
+		// minOutput is 0 as we do not want any dimming when the response time
+		// does not violate the desired setpoint.
 		0,
+		// maxOutput is 99 instead of 100 to ensure response times are collected
+		//during "full" dimming even if requests are only made to dimmed components.
 		99,
 		config.ControllerSamplePeriod,
 	)
@@ -108,14 +139,16 @@ func main() {
 	}
 }
 
-func initLogger(config *Config) Logger {
-	var logger Logger
-	if config.LoggerDriver == "stdout" {
-		logger = NewStdLogger()
+func initLogger(config *Config) logging.Logger {
+	var logger logging.Logger
+	if config.LoggerDriver == "noop" {
+		logger = logging.NewNoopLogger()
+	} else if config.LoggerDriver == "stdout" {
+		logger = logging.NewStdoutLogger()
 	} else if config.LoggerDriver == "influxdb" {
-		logger = NewInfluxDBLogger(config.LoggerInfluxDBHost, config.LoggerInfluxDBToken)
+		logger = logging.NewInfluxDBLogger(config.LoggerInfluxDBHost, config.LoggerInfluxDBToken)
 	} else {
-		log.Fatalf("expected env var LOGGER_DRIVER one of {stdout, influxdb}; got %s", config.LoggerDriver)
+		log.Fatalf("expected env var LOGGER_DRIVER one of {noop, stdout, influxdb}; got %s", config.LoggerDriver)
 	}
 	return logger
 }
@@ -132,7 +165,14 @@ func initRequestFilter() *RequestFilter {
 	return filter
 }
 
-func controlLoop(tach *tachymeter.Tachymeter, pid *controller.PIDController, logger Logger, dimmingPercentile string, dimmingPercentage *float64, dimmingPercentageMux *sync.RWMutex) {
+func controlLoop(
+	tach *tachymeter.Tachymeter,
+	pid *controller.PIDController,
+	logger logging.Logger,
+	dimmingPercentile string,
+	dimmingPercentage *float64,
+	dimmingPercentageMux *sync.RWMutex,
+) {
 	for range time.Tick(time.Second * 1) {
 		metrics := tach.Calc()
 
