@@ -9,7 +9,6 @@ import (
 	"math/rand"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/ilyakaznacheev/cleanenv"
@@ -65,21 +64,12 @@ func main() {
 	err := cleanenv.ReadEnv(&config)
 	if err != nil {
 		log.Fatalf("expected err == nil in envconfig.Process(); got err = %v", err)
-	} else if config.ControllerPercentile != "p50" && config.ControllerPercentile != "p75" && config.ControllerPercentile != "p95" {
-		log.Fatalf("expected enviornment variable CONTROLLER_PERCENTILE to be one of {p50|p75|p95}; got %s", config.ControllerPercentile)
 	}
 
-	requestFilter := initRequestFilter()
 	logger := initLogger(&config)
-	pid, err := initPIDController(&config)
-	if err != nil {
-		log.Fatalf("expected controller.NewPIDController() returns nil err; got err = %v", err)
-	}
+	requestFilter := initRequestFilter()
 	responseTimeCollector := response_time.NewTachymeterResponseTimeCollector(config.ResponseTimeCollectorRequestsWindow)
-
-	controllerOutputMux := &sync.RWMutex{}
-	controllerOutput := 0.0
-	go controlLoop(responseTimeCollector, pid, logger, config.ControllerPercentile, &controllerOutput, controllerOutputMux)
+	controlLoop := initControlLoop(&config, initPIDController(&config), responseTimeCollector, logger)
 
 	proxy := &fasthttp.HostClient{
 		Addr:     config.BackEndHost + ":" + config.BackEndPort,
@@ -93,11 +83,7 @@ func main() {
 		// If dimming is enabled, enforce dimming on dimmable components by
 		// returning a HTTP error page if a probability is met.
 		if config.IsDimmerEnabled && requestFilter.Matches(string(ctx.Path()), string(ctx.Method()), string(req.Header.Referer())) {
-			controllerOutputMux.RLock()
-			dimmingPercentage := controllerOutput
-			controllerOutputMux.RUnlock()
-
-			if rand.Float64()*100 < dimmingPercentage {
+			if rand.Float64()*100 < controlLoop.ReadDimmingPercentage() {
 				ctx.Error("dimming", http.StatusTooManyRequests)
 				return
 			}
@@ -157,8 +143,8 @@ func initRequestFilter() *RequestFilter {
 	return filter
 }
 
-func initPIDController(config *Config) (*controller.PIDController, error) {
-	return controller.NewPIDController(
+func initPIDController(config *Config) *controller.PIDController {
+	c, err := controller.NewPIDController(
 		controller.NewRealtimeClock(),
 		config.ControllerSetpoint,
 		config.ControllerKp,
@@ -171,45 +157,32 @@ func initPIDController(config *Config) (*controller.PIDController, error) {
 		// does not violate the desired setpoint.
 		0,
 		// maxOutput is 99 instead of 100 to ensure response times are collected
-		//during "full" dimming even if requests are only made to dimmed components.
+		// during "full" dimming even if requests are only made to dimmed
+		// components.
 		99,
 		config.ControllerSamplePeriod,
 	)
+	if err != nil {
+		log.Fatalf("expected controller.NewPIDController() returns nil err; got err = %v", err)
+	}
+
+	return c
 }
 
-func controlLoop(
-	responseTimes response_time.ResponseTimeCollector,
+func initControlLoop(
+	config *Config,
 	pid *controller.PIDController,
+	responseTimeCollector response_time.ResponseTimeCollector,
 	logger logging.Logger,
-	dimmingPercentile string,
-	dimmingPercentage *float64,
-	dimmingPercentageMux *sync.RWMutex,
-) {
-	for range time.Tick(time.Second * 1) {
-		aggregation := responseTimes.Aggregate()
-
-		// PID controller and logger operate with seconds.
-		p50 := float64(aggregation.P50) / float64(time.Second)
-		p75 := float64(aggregation.P75) / float64(time.Second)
-		p95 := float64(aggregation.P95) / float64(time.Second)
-		logger.LogAggregateResponseTimes(p50, p75, p95)
-
-		var pidOutput float64
-		if dimmingPercentile == "p50" {
-			pidOutput = pid.Output(p50)
-		} else if dimmingPercentile == "p75" {
-			pidOutput = pid.Output(p75)
-		} else if dimmingPercentile == "p95" {
-			pidOutput = pid.Output(p95)
-		} else {
-			log.Fatalf("controlLoop() expected dimmingPercentile to be one of {50|75|95}; got %s", dimmingPercentile)
-		}
-		logger.LogDimmerOutput(pidOutput)
-		logger.LogPIDControllerState(pid.DebugP, pid.DebugI, pid.DebugD, pid.DebugErr)
-
-		// Apply the PID output.
-		dimmingPercentageMux.Lock()
-		*dimmingPercentage = pidOutput
-		dimmingPercentageMux.Unlock()
+) *DimmerControlLoop {
+	if config.ControllerPercentile != "p50" && config.ControllerPercentile != "p75" && config.ControllerPercentile != "p95" {
+		log.Fatalf("expected environment variable CONTROLLER_PERCENTILE to be one of {p50|p75|p95}; got %s", config.ControllerPercentile)
 	}
+
+	c, err := StartNewDimmerControlLoop(pid, responseTimeCollector, config.ControllerPercentile, logger)
+	if err != nil {
+		log.Fatalf("expected StartNewDimmerControlLoop() returns nil err; got err = %v", err)
+	}
+
+	return c
 }
