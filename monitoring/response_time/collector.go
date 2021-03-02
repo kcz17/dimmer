@@ -3,9 +3,9 @@ package response_time
 import "time"
 
 type ResponseTimeAggregation struct {
-	P50 time.Duration // 50th percentile response time in second.
-	P75 time.Duration // 75th percentile response time in second.
-	P95 time.Duration // 95th percentile response time in second.
+	P50 time.Duration // P50 is the 50th percentile response time.
+	P75 time.Duration // P75 is the 75th percentile response time.
+	P95 time.Duration // P95 is the 95th percentile response time.
 }
 
 type ResponseTimeCollector interface {
