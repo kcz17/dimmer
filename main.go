@@ -54,9 +54,9 @@ type Config struct {
 	// the number of expected requests received during the sample period.
 	ResponseTimeCollectorRequestsWindow int `env:"NUM_REQUESTS_WINDOW"`
 
-	// ResponseTimeCollectorExcludesHTML excludes response time capturing for .html files. Used
-	// to ensure that response time calculations are not biased by the low
-	// response times of static files.
+	// ResponseTimeCollectorExcludesHTML excludes response time capturing for
+	// .html files. Used to ensure that response time calculations are not
+	// biased by the low response times of static files.
 	ResponseTimeCollectorExcludesHTML bool `env:"LOGGER_EXCLUDE_HTML" env-default:"false"`
 }
 
@@ -90,6 +90,8 @@ func main() {
 		req := &ctx.Request
 		resp := &ctx.Response
 
+		// If dimming is enabled, enforce dimming on dimmable components by
+		// returning a HTTP error page if a probability is met.
 		if config.IsDimmerEnabled && requestFilter.Matches(string(ctx.Path()), string(ctx.Method()), string(req.Header.Referer())) {
 			controllerOutputMux.RLock()
 			dimmingPercentage := controllerOutput
@@ -106,11 +108,15 @@ func main() {
 			req.Header.Del("Connection")
 		}(req)
 
+		// Proxy the request, capturing the request time.
 		startTime := time.Now()
 		if err := proxy.Do(req, resp); err != nil {
 			ctx.Logger().Printf("fasthttp: error when proxying the request: %v", err)
 		}
 		duration := time.Now().Sub(startTime)
+
+		// Persist the request time, excluding static .html files if the option
+		// for exclusion is enabled.
 		if !config.ResponseTimeCollectorExcludesHTML || !strings.Contains(string(ctx.Path()), ".html") {
 			logger.LogResponseTime(float64(duration) / float64(time.Second))
 			responseTimeCollector.Add(duration)
