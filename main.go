@@ -51,12 +51,12 @@ type Config struct {
 	// ResponseTimeCollectorRequestsWindow defines the number of requests used
 	// to aggregate response time metrics. It should be smaller than or equal to
 	// the number of expected requests received during the sample period.
-	ResponseTimeCollectorRequestsWindow int `env:"NUM_REQUESTS_WINDOW"`
+	ResponseTimeCollectorRequestsWindow int `env:"RESPONSE_TIME_COLLECTOR_NUM_REQUESTS_WINDOW"`
 
 	// ResponseTimeCollectorExcludesHTML excludes response time capturing for
 	// .html files. Used to ensure that response time calculations are not
 	// biased by the low response times of static files.
-	ResponseTimeCollectorExcludesHTML bool `env:"LOGGER_EXCLUDE_HTML" env-default:"false"`
+	ResponseTimeCollectorExcludesHTML bool `env:"RESPONSE_TIME_COLLECTOR_EXCLUDES_HTML" env-default:"false"`
 }
 
 func main() {
