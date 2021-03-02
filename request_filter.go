@@ -10,9 +10,16 @@ import (
 // Rule is formatted by "[METHOD] [PATH]".
 type Rule = string
 
+// RequestFilter checks whether a given request path-method-referer combination
+// matches a rule within its rules set. Matches can be excluded if the referer
+// for matching rule contains an exclusion from refererExclusions. The filter
+// is insensitive to the leading slash of a path.
 type RequestFilter struct {
-	rules             map[Rule]bool     // Set of rules to compare against.
-	refererExclusions map[Rule][]string // Specifies Referer header substrings which should exclude a request from the filter.
+	// rules are a set of Method-Path combinations which
+	rules map[Rule]bool
+	// refererExclusions specifies substrings which should exclude a request
+	// from the filter if they occur inside a Referer header.
+	refererExclusions map[Rule][]string
 }
 
 func NewRequestFilter() *RequestFilter {
@@ -39,7 +46,8 @@ func (r *RequestFilter) Matches(path string, method string, referer string) bool
 }
 
 // AddPath adds rules a given path and method both inclusive and exclusive of
-// the path's leading slash.
+// the path's leading slash. Both are added to the set at AddPath-time so that
+// Matches does not require string manipulation.
 func (r *RequestFilter) AddPath(path string, method string) {
 	path = prependLeadingSlashIfMissing(path)
 	r.rules[toRule(path[1:], method)] = true
@@ -53,7 +61,8 @@ func (r *RequestFilter) AddPathForAllMethods(path string) {
 	}
 }
 
-// Adds a {@link RefererFilter} for an existing rule.
+// AddRefererExclusion adds refererExclusions for an existing rule both
+// inclusive and exclusive of the given path's leading slash.
 func (r *RequestFilter) AddRefererExclusion(path string, method string, substring string) error {
 	path = prependLeadingSlashIfMissing(path)
 	rule := toRule(path, method)
