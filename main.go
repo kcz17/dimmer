@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/kcz17/dimmer/controller"
-	"github.com/kcz17/dimmer/logging"
-	"github.com/kcz17/dimmer/monitoring/responsetime"
+	"github.com/kcz17/dimmer/internal/monitoring/responsetime"
+	"github.com/kcz17/dimmer/internal/serving"
+	"github.com/kcz17/dimmer/internal/serving/controller"
+	"github.com/kcz17/dimmer/internal/serving/logging"
 	"log"
 	"math/rand"
 	"net/http"
@@ -135,8 +136,8 @@ func initLogger(config *Config) logging.Logger {
 	return logger
 }
 
-func initRequestFilter() *RequestFilter {
-	filter := NewRequestFilter()
+func initRequestFilter() *serving.RequestFilter {
+	filter := serving.NewRequestFilter()
 	filter.AddPathForAllMethods("recommender")
 	filter.AddPathForAllMethods("news.html")
 	filter.AddPathForAllMethods("news")
@@ -147,10 +148,10 @@ func initRequestFilter() *RequestFilter {
 	return filter
 }
 
-func initPathProbabilities() *PathProbabilities {
+func initPathProbabilities() *serving.PathProbabilities {
 	// Set the defaultValue to 1 so we allow dimming by default for paths which
 	// are not in the probabilities list.
-	p, err := NewPathProbabilities(1)
+	p, err := serving.NewPathProbabilities(1)
 	if err != nil {
 		panic(fmt.Sprintf("expected initPathProbabilities() returns nil err; got err = %v", err))
 	}
@@ -188,12 +189,12 @@ func initControlLoop(
 	pid *controller.PIDController,
 	responseTimeCollector responsetime.Collector,
 	logger logging.Logger,
-) *DimmerControlLoop {
+) *serving.DimmerControlLoop {
 	if config.ControllerPercentile != "p50" && config.ControllerPercentile != "p75" && config.ControllerPercentile != "p95" {
 		log.Fatalf("expected environment variable CONTROLLER_PERCENTILE to be one of {p50|p75|p95}; got %s", config.ControllerPercentile)
 	}
 
-	c, err := StartNewDimmerControlLoop(pid, responseTimeCollector, config.ControllerPercentile, logger)
+	c, err := serving.StartNewDimmerControlLoop(pid, responseTimeCollector, config.ControllerPercentile, logger)
 	if err != nil {
 		log.Fatalf("expected StartNewDimmerControlLoop() returns nil err; got err = %v", err)
 	}

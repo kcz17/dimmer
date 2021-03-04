@@ -30,3 +30,7 @@ func (c *tachymeterCollector) Aggregate() *Aggregation {
 		P95: aggregation.Time.P95,
 	}
 }
+
+func (c *tachymeterCollector) Reset() {
+	c.tach.Reset()
+}

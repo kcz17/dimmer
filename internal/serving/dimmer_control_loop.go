@@ -1,11 +1,11 @@
-package main
+package serving
 
 import (
 	"errors"
 	"fmt"
-	"github.com/kcz17/dimmer/controller"
-	"github.com/kcz17/dimmer/logging"
-	"github.com/kcz17/dimmer/monitoring/responsetime"
+	"github.com/kcz17/dimmer/internal/monitoring/responsetime"
+	"github.com/kcz17/dimmer/internal/serving/controller"
+	"github.com/kcz17/dimmer/internal/serving/logging"
 	"sync"
 	"time"
 )
