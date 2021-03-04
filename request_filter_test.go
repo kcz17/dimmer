@@ -45,23 +45,23 @@ func Test_prependLeadingSlashIfMissing(t *testing.T) {
 }
 
 func TestRequestFilter_Matches(t *testing.T) {
-	rules := map[Rule]bool{
-		toRule("/path", http.MethodGet):                      true,
-		toRule("path", http.MethodGet):                       true,
-		toRule("/pathWithRefererExclusions", http.MethodGet): true,
-		toRule("pathWithRefererExclusions", http.MethodGet):  true,
+	rules := map[RequestFilterRule]bool{
+		toRequestFilterRule("/path", http.MethodGet):                      true,
+		toRequestFilterRule("path", http.MethodGet):                       true,
+		toRequestFilterRule("/pathWithRefererExclusions", http.MethodGet): true,
+		toRequestFilterRule("pathWithRefererExclusions", http.MethodGet):  true,
 	}
-	refererExclusions := map[Rule][]string{
-		toRule("/pathWithRefererExclusions", http.MethodGet): {
+	refererExclusions := map[RequestFilterRule][]string{
+		toRequestFilterRule("/pathWithRefererExclusions", http.MethodGet): {
 			"foo", "bar",
 		},
-		toRule("pathWithRefererExclusions", http.MethodGet): {
+		toRequestFilterRule("pathWithRefererExclusions", http.MethodGet): {
 			"foo", "bar",
 		},
 	}
 	type fields struct {
-		rules             map[Rule]bool
-		refererExclusions map[Rule][]string
+		rules             map[RequestFilterRule]bool
+		refererExclusions map[RequestFilterRule][]string
 	}
 	type args struct {
 		path    string

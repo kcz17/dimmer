@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-// Rule is formatted by "[METHOD] [PATH]".
-type Rule = string
+// RequestFilterRule is formatted by "[METHOD] [PATH]".
+type RequestFilterRule = string
 
 // RequestFilter checks whether a given request path-method-referer combination
 // matches a rule within its rules set. Matches can be excluded if the referer
@@ -16,18 +16,21 @@ type Rule = string
 // is insensitive to the leading slash of a path.
 type RequestFilter struct {
 	// rules are a set of Method-Path combinations which
-	rules map[Rule]bool
+	rules map[RequestFilterRule]bool
 	// refererExclusions specifies substrings which should exclude a request
 	// from the filter if they occur inside a Referer header.
-	refererExclusions map[Rule][]string
+	refererExclusions map[RequestFilterRule][]string
 }
 
 func NewRequestFilter() *RequestFilter {
-	return &RequestFilter{rules: map[Rule]bool{}, refererExclusions: map[Rule][]string{}}
+	return &RequestFilter{
+		rules:             map[RequestFilterRule]bool{},
+		refererExclusions: map[RequestFilterRule][]string{},
+	}
 }
 
 func (r *RequestFilter) Matches(path string, method string, referer string) bool {
-	rule := toRule(path, method)
+	rule := toRequestFilterRule(path, method)
 
 	// No rule found.
 	if !r.rules[rule] {
@@ -41,7 +44,7 @@ func (r *RequestFilter) Matches(path string, method string, referer string) bool
 		}
 	}
 
-	// Rule found and not excluded.
+	// RequestFilterRule found and not excluded.
 	return true
 }
 
@@ -50,8 +53,8 @@ func (r *RequestFilter) Matches(path string, method string, referer string) bool
 // Matches does not require string manipulation.
 func (r *RequestFilter) AddPath(path string, method string) {
 	path = prependLeadingSlashIfMissing(path)
-	r.rules[toRule(path[1:], method)] = true
-	r.rules[toRule(path, method)] = true
+	r.rules[toRequestFilterRule(path[1:], method)] = true
+	r.rules[toRequestFilterRule(path, method)] = true
 }
 
 func (r *RequestFilter) AddPathForAllMethods(path string) {
@@ -65,8 +68,8 @@ func (r *RequestFilter) AddPathForAllMethods(path string) {
 // inclusive and exclusive of the given path's leading slash.
 func (r *RequestFilter) AddRefererExclusion(path string, method string, substring string) error {
 	path = prependLeadingSlashIfMissing(path)
-	rule := toRule(path, method)
-	ruleWithoutPrependingSlash := toRule(path[1:], method)
+	rule := toRequestFilterRule(path, method)
+	ruleWithoutPrependingSlash := toRequestFilterRule(path[1:], method)
 
 	if !r.rules[rule] {
 		return errors.New(fmt.Sprintf("AddRefererExclusion() expected rules contains rule %v; none found", rule))
@@ -78,18 +81,12 @@ func (r *RequestFilter) AddRefererExclusion(path string, method string, substrin
 
 	}
 	r.refererExclusions[rule] = append(r.refererExclusions[rule], substring)
-	r.refererExclusions[ruleWithoutPrependingSlash] = append(r.refererExclusions[ruleWithoutPrependingSlash], substring)
+	r.refererExclusions[ruleWithoutPrependingSlash] =
+		append(r.refererExclusions[ruleWithoutPrependingSlash], substring)
 
 	return nil
 }
 
-func prependLeadingSlashIfMissing(path string) string {
-	if len(path) == 0 || path[0] != '/' {
-		path = "/" + path
-	}
-	return path
-}
-
-func toRule(path string, method string) Rule {
+func toRequestFilterRule(path string, method string) RequestFilterRule {
 	return method + " " + path
 }

@@ -68,6 +68,7 @@ func main() {
 
 	logger := initLogger(&config)
 	requestFilter := initRequestFilter()
+	pathProbabilities := initPathProbabilities()
 	responseTimeCollector := responsetime.NewTachymeterCollector(config.ResponseTimeCollectorRequestsWindow)
 	controlLoop := initControlLoop(&config, initPIDController(&config), responseTimeCollector, logger)
 
@@ -84,8 +85,11 @@ func main() {
 		// returning a HTTP error page if a probability is met.
 		if config.IsDimmerEnabled && requestFilter.Matches(string(ctx.Path()), string(ctx.Method()), string(req.Header.Referer())) {
 			if rand.Float64()*100 < controlLoop.ReadDimmingPercentage() {
-				ctx.Error("dimming", http.StatusTooManyRequests)
-				return
+				// Dim based on probabilities set with PathProbabilities.
+				if rand.Float64() < pathProbabilities.Get(string(ctx.Path())) {
+					ctx.Error("dimming", http.StatusTooManyRequests)
+					return
+				}
 			}
 		}
 
@@ -141,6 +145,16 @@ func initRequestFilter() *RequestFilter {
 		panic(fmt.Sprintf("expected filter.AddRefererExclusion() returns nil err; got err = %v", err))
 	}
 	return filter
+}
+
+func initPathProbabilities() *PathProbabilities {
+	// Set the defaultValue to 1 so we allow dimming by default for paths which
+	// are not in the probabilities list.
+	p, err := NewPathProbabilities(1)
+	if err != nil {
+		panic(fmt.Sprintf("expected initPathProbabilities() returns nil err; got err = %v", err))
+	}
+	return p
 }
 
 func initPIDController(config *Config) *controller.PIDController {
