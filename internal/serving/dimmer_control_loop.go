@@ -29,8 +29,13 @@ type DimmerControlLoop struct {
 	// race conditions by dimmingPercentageMux.
 	dimmingPercentage    float64
 	dimmingPercentageMux *sync.RWMutex
+	// loopWG allows the spawned goroutine to be gracefully stopped.
+	loopStarted bool
+	loopWG      *sync.WaitGroup
+	loopStop    chan bool
 }
 
+// StartNewDimmerControlLoop spawns a new goroutine with the control loop.
 func StartNewDimmerControlLoop(
 	pid *controller.PIDController,
 	responseTimeCollector responsetime.Collector,
@@ -50,8 +55,9 @@ func StartNewDimmerControlLoop(
 		logger:                 logger,
 		dimmingPercentage:      0.0,
 		dimmingPercentageMux:   &sync.RWMutex{},
+		loopStarted:            false,
 	}
-	go c.controlLoop()
+	c.Restart()
 
 	return c, nil
 }
@@ -67,33 +73,70 @@ func (c *DimmerControlLoop) ReadDimmingPercentage() float64 {
 	return dimmingPercentage
 }
 
+// AddResponseTime adds a new response time to the response time collector,
+// likely changing the input at the next control loop.
+func (c *DimmerControlLoop) AddResponseTime(t time.Duration) {
+	c.responseTimeCollector.Add(t)
+}
+
 func (c *DimmerControlLoop) controlLoop() {
-	for range time.Tick(time.Second * 1) {
-		aggregation := c.responseTimeCollector.Aggregate()
+	ticker := time.NewTicker(time.Second * 1)
+	defer ticker.Stop()
+	defer c.loopWG.Done()
+	for {
+		select {
+		case <-ticker.C:
+			aggregation := c.responseTimeCollector.Aggregate()
 
-		// PID controller and logger operate with seconds.
-		p50 := float64(aggregation.P50) / float64(time.Second)
-		p75 := float64(aggregation.P75) / float64(time.Second)
-		p95 := float64(aggregation.P95) / float64(time.Second)
-		c.logger.LogAggregateResponseTimes(p50, p75, p95)
+			// PID controller and logger operate with seconds.
+			p50 := float64(aggregation.P50) / float64(time.Second)
+			p75 := float64(aggregation.P75) / float64(time.Second)
+			p95 := float64(aggregation.P95) / float64(time.Second)
+			c.logger.LogAggregateResponseTimes(p50, p75, p95)
 
-		// Retrieve the PID output.
-		var pidOutput float64
-		if c.responseTimePercentile == P50 {
-			pidOutput = c.pid.Output(p50)
-		} else if c.responseTimePercentile == P75 {
-			pidOutput = c.pid.Output(p75)
-		} else if c.responseTimePercentile == P95 {
-			pidOutput = c.pid.Output(p95)
-		} else {
-			panic(fmt.Sprintf("DimmerControlLoop.controlLoop() expected responseTimePercentile to be one of {50|75|95}; got %s", c.responseTimePercentile))
+			// Retrieve the PID output.
+			var pidOutput float64
+			if c.responseTimePercentile == P50 {
+				pidOutput = c.pid.Output(p50)
+			} else if c.responseTimePercentile == P75 {
+				pidOutput = c.pid.Output(p75)
+			} else if c.responseTimePercentile == P95 {
+				pidOutput = c.pid.Output(p95)
+			} else {
+				panic(fmt.Sprintf("DimmerControlLoop.controlLoop() expected responseTimePercentile to be one of {50|75|95}; got %s", c.responseTimePercentile))
+			}
+			c.logger.LogDimmerOutput(pidOutput)
+			c.logger.LogPIDControllerState(c.pid.DebugP, c.pid.DebugI, c.pid.DebugD, c.pid.DebugErr)
+
+			// Apply the PID output.
+			c.dimmingPercentageMux.Lock()
+			c.dimmingPercentage = pidOutput
+			c.dimmingPercentageMux.Unlock()
+		case <-c.loopStop:
+			return
 		}
-		c.logger.LogDimmerOutput(pidOutput)
-		c.logger.LogPIDControllerState(c.pid.DebugP, c.pid.DebugI, c.pid.DebugD, c.pid.DebugErr)
 
-		// Apply the PID output.
-		c.dimmingPercentageMux.Lock()
-		c.dimmingPercentage = pidOutput
-		c.dimmingPercentageMux.Unlock()
 	}
+}
+
+func (c *DimmerControlLoop) Restart() {
+	// Reset the control loop, response time collector and PID controller
+	// in this order to ensure stale data is not written between each reset.
+	if c.loopStarted {
+		close(c.loopStop)
+		c.loopWG.Wait()
+		// Replace the mutex as we are unsure whether the consumers will exit
+		// gracefully (i.e., the lock is still acquired by a listener while the
+		// server is killed).
+		c.dimmingPercentageMux = &sync.RWMutex{}
+
+		c.responseTimeCollector.Reset()
+		c.pid.Reset()
+	}
+
+	c.loopStop = make(chan bool, 1)
+	c.loopWG = &sync.WaitGroup{}
+
+	c.loopWG.Add(1)
+	go c.controlLoop()
 }

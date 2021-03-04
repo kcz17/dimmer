@@ -98,3 +98,14 @@ func (c *PIDController) Output(input float64) float64 {
 
 	return output
 }
+
+func (c *PIDController) Reset() {
+	c.lastOutput = 0
+	c.lastTick = time.Time{}
+	c.lastInput = 0
+	c.integral = 0
+	c.DebugP = 0
+	c.DebugI = 0
+	c.DebugD = 0
+	c.DebugErr = 0
+}

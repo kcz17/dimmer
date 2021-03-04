@@ -78,13 +78,38 @@ func main() {
 		MaxConns: 2048,
 	}
 
-	if err := fasthttp.ListenAndServe(fmt.Sprintf(":%v", config.FrontEndPort), func(ctx *fasthttp.RequestCtx) {
+	server := &fasthttp.Server{
+		Handler: requestHandler(
+			config.IsDimmerEnabled,
+			config.ResponseTimeCollectorExcludesHTML,
+			proxy,
+			controlLoop,
+			requestFilter,
+			pathProbabilities,
+			logger,
+		),
+	}
+	if err := server.ListenAndServe(fmt.Sprintf(":%v", config.FrontEndPort)); err != nil {
+		log.Fatalf("fasthttp: server error: %v", err)
+	}
+}
+
+func requestHandler(
+	isDimmerEnabled bool,
+	responseTimeCollectorExcludesHTML bool,
+	proxy *fasthttp.HostClient,
+	controlLoop *serving.DimmerControlLoop,
+	requestFilter *serving.RequestFilter,
+	pathProbabilities *serving.PathProbabilities,
+	logger logging.Logger,
+) fasthttp.RequestHandler {
+	return func(ctx *fasthttp.RequestCtx) {
 		req := &ctx.Request
 		resp := &ctx.Response
 
 		// If dimming is enabled, enforce dimming on dimmable components by
 		// returning a HTTP error page if a probability is met.
-		if config.IsDimmerEnabled && requestFilter.Matches(string(ctx.Path()), string(ctx.Method()), string(req.Header.Referer())) {
+		if isDimmerEnabled && requestFilter.Matches(string(ctx.Path()), string(ctx.Method()), string(req.Header.Referer())) {
 			if rand.Float64()*100 < controlLoop.ReadDimmingPercentage() {
 				// Dim based on probabilities set with PathProbabilities.
 				if rand.Float64() < pathProbabilities.Get(string(ctx.Path())) {
@@ -108,17 +133,15 @@ func main() {
 
 		// Persist the request time, excluding static .html files if the option
 		// for exclusion is enabled.
-		if !config.ResponseTimeCollectorExcludesHTML || !strings.Contains(string(ctx.Path()), ".html") {
+		if !responseTimeCollectorExcludesHTML || !strings.Contains(string(ctx.Path()), ".html") {
 			logger.LogResponseTime(float64(duration) / float64(time.Second))
-			responseTimeCollector.Add(duration)
+			controlLoop.AddResponseTime(duration)
 		}
 
 		// Remove connection header per RFC2616.
 		func(resp *fasthttp.Response) {
 			resp.Header.Del("Connection")
 		}(resp)
-	}); err != nil {
-		log.Fatalf("fasthttp: server error: %v", err)
 	}
 }
 
