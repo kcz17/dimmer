@@ -1,4 +1,4 @@
-package controller
+package pidcontroller
 
 import (
 	"gonum.org/v1/plot/plotter"

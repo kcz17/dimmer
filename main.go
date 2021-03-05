@@ -2,18 +2,13 @@ package main
 
 import (
 	"fmt"
-	"github.com/kcz17/dimmer/controller"
+	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/kcz17/dimmer/filters"
 	"github.com/kcz17/dimmer/logging"
 	"github.com/kcz17/dimmer/monitoring/responsetime"
+	"github.com/kcz17/dimmer/pidcontroller"
+	serving "github.com/kcz17/dimmer/serving"
 	"log"
-	"math/rand"
-	"net/http"
-	"strings"
-	"time"
-
-	"github.com/ilyakaznacheev/cleanenv"
-	"github.com/valyala/fasthttp"
 )
 
 type Config struct {
@@ -80,71 +75,20 @@ func main() {
 	requestFilter := initRequestFilter()
 	pathProbabilities := initPathProbabilities()
 
-	proxy := &fasthttp.HostClient{Addr: config.BackEndHost + ":" + config.BackEndPort, MaxConns: 2048}
-	server := &fasthttp.Server{
-		Handler: requestHandler(
-			config.IsDimmerEnabled,
-			config.ResponseTimeCollectorExcludesHTML,
-			proxy,
-			controlLoop,
-			requestFilter,
-			pathProbabilities,
-			logger,
-		),
+	server := serving.Server{
+		FrontendAddr:                      fmt.Sprintf(":%v", config.FrontEndPort),
+		BackendAddr:                       config.BackEndHost + ":" + config.BackEndPort,
+		MaxConns:                          2048,
+		ControlLoop:                       controlLoop,
+		RequestFilter:                     requestFilter,
+		PathProbabilities:                 pathProbabilities,
+		Logger:                            logger,
+		IsDimmingEnabled:                  config.IsDimmerEnabled,
+		ResponseTimeCollectorExcludesHTML: config.ResponseTimeCollectorExcludesHTML,
 	}
-	if err := server.ListenAndServe(fmt.Sprintf(":%v", config.FrontEndPort)); err != nil {
-		log.Fatalf("fasthttp: server error: %v", err)
-	}
-}
+	server.Start()
 
-func requestHandler(
-	isDimmerEnabled bool,
-	responseTimeCollectorExcludesHTML bool,
-	proxy *fasthttp.HostClient,
-	controlLoop *DimmerControlLoop,
-	requestFilter *filters.RequestFilter,
-	pathProbabilities *filters.PathProbabilities,
-	logger logging.Logger,
-) fasthttp.RequestHandler {
-	return func(ctx *fasthttp.RequestCtx) {
-		req := &ctx.Request
-		resp := &ctx.Response
-
-		// If dimming is enabled, enforce dimming on dimmable components by
-		// returning a HTTP error page if a probability is met.
-		if isDimmerEnabled && requestFilter.Matches(string(ctx.Path()), string(ctx.Method()), string(req.Header.Referer())) {
-			if rand.Float64()*100 < controlLoop.ReadDimmingPercentage() {
-				// Dim based on probabilities set with PathProbabilities.
-				if rand.Float64() < pathProbabilities.Get(string(ctx.Path())) {
-					ctx.Error("dimming", http.StatusTooManyRequests)
-					return
-				}
-			}
-		}
-
-		// Remove connection header per RFC2616.
-		func(req *fasthttp.Request) {
-			req.Header.Del("Connection")
-		}(req)
-
-		// Proxy the request, capturing the request time.
-		startTime := time.Now()
-		if err := proxy.Do(req, resp); err != nil {
-			ctx.Logger().Printf("fasthttp: error when proxying the request: %v", err)
-		}
-		duration := time.Now().Sub(startTime)
-
-		// Persist the request time, excluding static .html files if the option
-		// for exclusion is enabled.
-		if !responseTimeCollectorExcludesHTML || !strings.Contains(string(ctx.Path()), ".html") {
-			logger.LogResponseTime(float64(duration) / float64(time.Second))
-			controlLoop.AddResponseTime(duration)
-		}
-
-		// Remove connection header per RFC2616.
-		func(resp *fasthttp.Response) {
-			resp.Header.Del("Connection")
-		}(resp)
+	for {
 	}
 }
 
@@ -184,9 +128,9 @@ func initPathProbabilities() *filters.PathProbabilities {
 	return p
 }
 
-func initPIDController(config *Config) *controller.PIDController {
-	c, err := controller.NewPIDController(
-		controller.NewRealtimeClock(),
+func initPIDController(config *Config) *pidcontroller.PIDController {
+	c, err := pidcontroller.NewPIDController(
+		pidcontroller.NewRealtimeClock(),
 		config.ControllerSetpoint,
 		config.ControllerKp,
 		config.ControllerKi,
@@ -212,17 +156,17 @@ func initPIDController(config *Config) *controller.PIDController {
 
 func initControlLoop(
 	config *Config,
-	pid *controller.PIDController,
+	pid *pidcontroller.PIDController,
 	responseTimeCollector responsetime.Collector,
 	logger logging.Logger,
-) *DimmerControlLoop {
+) *serving.ServerControlLoop {
 	if config.ControllerPercentile != "p50" && config.ControllerPercentile != "p75" && config.ControllerPercentile != "p95" {
 		log.Fatalf("expected environment variable CONTROLLER_PERCENTILE to be one of {p50|p75|p95}; got %s", config.ControllerPercentile)
 	}
 
-	c, err := StartNewDimmerControlLoop(pid, responseTimeCollector, config.ControllerPercentile, logger)
+	c, err := serving.NewServerControlLoop(pid, responseTimeCollector, config.ControllerPercentile, logger)
 	if err != nil {
-		log.Fatalf("expected StartNewDimmerControlLoop() returns nil err; got err = %v", err)
+		log.Fatalf("expected NewServerControlLoop() returns nil err; got err = %v", err)
 	}
 
 	return c
