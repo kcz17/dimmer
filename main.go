@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/kcz17/dimmer/internal/monitoring/responsetime"
-	"github.com/kcz17/dimmer/internal/serving"
-	"github.com/kcz17/dimmer/internal/serving/controller"
-	"github.com/kcz17/dimmer/internal/serving/logging"
+	"github.com/kcz17/dimmer/controller"
+	"github.com/kcz17/dimmer/filters"
+	"github.com/kcz17/dimmer/logging"
+	"github.com/kcz17/dimmer/monitoring/responsetime"
 	"log"
 	"math/rand"
 	"net/http"
@@ -68,16 +68,19 @@ func main() {
 	}
 
 	logger := initLogger(&config)
+
+	controlLoop := initControlLoop(
+		&config,
+		initPIDController(&config),
+		responsetime.NewTachymeterCollector(config.ResponseTimeCollectorRequestsWindow),
+		logger,
+	)
+
+	// Filters used to selectively dim routes.
 	requestFilter := initRequestFilter()
 	pathProbabilities := initPathProbabilities()
-	responseTimeCollector := responsetime.NewTachymeterCollector(config.ResponseTimeCollectorRequestsWindow)
-	controlLoop := initControlLoop(&config, initPIDController(&config), responseTimeCollector, logger)
 
-	proxy := &fasthttp.HostClient{
-		Addr:     config.BackEndHost + ":" + config.BackEndPort,
-		MaxConns: 2048,
-	}
-
+	proxy := &fasthttp.HostClient{Addr: config.BackEndHost + ":" + config.BackEndPort, MaxConns: 2048}
 	server := &fasthttp.Server{
 		Handler: requestHandler(
 			config.IsDimmerEnabled,
@@ -98,9 +101,9 @@ func requestHandler(
 	isDimmerEnabled bool,
 	responseTimeCollectorExcludesHTML bool,
 	proxy *fasthttp.HostClient,
-	controlLoop *serving.DimmerControlLoop,
-	requestFilter *serving.RequestFilter,
-	pathProbabilities *serving.PathProbabilities,
+	controlLoop *DimmerControlLoop,
+	requestFilter *filters.RequestFilter,
+	pathProbabilities *filters.PathProbabilities,
 	logger logging.Logger,
 ) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
@@ -159,8 +162,8 @@ func initLogger(config *Config) logging.Logger {
 	return logger
 }
 
-func initRequestFilter() *serving.RequestFilter {
-	filter := serving.NewRequestFilter()
+func initRequestFilter() *filters.RequestFilter {
+	filter := filters.NewRequestFilter()
 	filter.AddPathForAllMethods("recommender")
 	filter.AddPathForAllMethods("news.html")
 	filter.AddPathForAllMethods("news")
@@ -171,10 +174,10 @@ func initRequestFilter() *serving.RequestFilter {
 	return filter
 }
 
-func initPathProbabilities() *serving.PathProbabilities {
+func initPathProbabilities() *filters.PathProbabilities {
 	// Set the defaultValue to 1 so we allow dimming by default for paths which
 	// are not in the probabilities list.
-	p, err := serving.NewPathProbabilities(1)
+	p, err := filters.NewPathProbabilities(1)
 	if err != nil {
 		panic(fmt.Sprintf("expected initPathProbabilities() returns nil err; got err = %v", err))
 	}
@@ -212,12 +215,12 @@ func initControlLoop(
 	pid *controller.PIDController,
 	responseTimeCollector responsetime.Collector,
 	logger logging.Logger,
-) *serving.DimmerControlLoop {
+) *DimmerControlLoop {
 	if config.ControllerPercentile != "p50" && config.ControllerPercentile != "p75" && config.ControllerPercentile != "p95" {
 		log.Fatalf("expected environment variable CONTROLLER_PERCENTILE to be one of {p50|p75|p95}; got %s", config.ControllerPercentile)
 	}
 
-	c, err := serving.StartNewDimmerControlLoop(pid, responseTimeCollector, config.ControllerPercentile, logger)
+	c, err := StartNewDimmerControlLoop(pid, responseTimeCollector, config.ControllerPercentile, logger)
 	if err != nil {
 		log.Fatalf("expected StartNewDimmerControlLoop() returns nil err; got err = %v", err)
 	}

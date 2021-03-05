@@ -1,11 +1,11 @@
-package serving
+package main
 
 import (
 	"errors"
 	"fmt"
-	"github.com/kcz17/dimmer/internal/monitoring/responsetime"
-	"github.com/kcz17/dimmer/internal/serving/controller"
-	"github.com/kcz17/dimmer/internal/serving/logging"
+	"github.com/kcz17/dimmer/controller"
+	"github.com/kcz17/dimmer/logging"
+	"github.com/kcz17/dimmer/monitoring/responsetime"
 	"sync"
 	"time"
 )
@@ -136,7 +136,8 @@ func (c *DimmerControlLoop) Restart() {
 
 	c.loopStop = make(chan bool, 1)
 	c.loopWG = &sync.WaitGroup{}
-
 	c.loopWG.Add(1)
 	go c.controlLoop()
+
+	c.loopStarted = true
 }

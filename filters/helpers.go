@@ -1,4 +1,4 @@
-package serving
+package filters
 
 func prependLeadingSlashIfMissing(path string) string {
 	if len(path) == 0 || path[0] != '/' {
