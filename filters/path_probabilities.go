@@ -37,6 +37,10 @@ func NewPathProbabilities(defaultValue float64) (*PathProbabilities, error) {
 	}, nil
 }
 
+func (p *PathProbabilities) List() map[string]float64 {
+	return p.probabilities
+}
+
 func (p *PathProbabilities) Get(path string) float64 {
 	p.probabilitiesMux.RLock()
 	probability, exists := p.probabilities[path]

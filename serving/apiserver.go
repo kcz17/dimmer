@@ -16,7 +16,10 @@ func (a *APIServer) ListenAndServe(addr string) error {
 
 	router.Post("/start", a.startHandler())
 	router.Post("/stop", a.stopHandler())
+
+	router.Get("/probabilities", a.listPathProbabilitiesHandler())
 	router.Post("/probabilities", a.setPathProbabilitiesHandler())
+	router.Delete("/probabilities", a.clearPathProbabilitiesHandler())
 
 	return fasthttp.ListenAndServe(addr, router.HandleRequest)
 }
@@ -27,8 +30,7 @@ func (a *APIServer) startHandler() routing.Handler {
 			return fmt.Errorf("could not start server: err = %w\n", err)
 		}
 
-		_ = c.Write("server started")
-		return nil
+		return c.Write("server started\n")
 	}
 }
 
@@ -38,8 +40,13 @@ func (a *APIServer) stopHandler() routing.Handler {
 			return fmt.Errorf("could not stop server: err = %w\n", err)
 		}
 
-		_ = c.Write("server stopped")
-		return nil
+		return c.Write("server stopped\n")
+	}
+}
+
+func (a *APIServer) listPathProbabilitiesHandler() routing.Handler {
+	return func(c *routing.Context) error {
+		return c.Write(fmt.Sprintf("probabilities:\n%v\n", a.Server.PathProbabilities.List()))
 	}
 }
 
@@ -54,7 +61,13 @@ func (a *APIServer) setPathProbabilitiesHandler() routing.Handler {
 			return fmt.Errorf("could not set probabilities: err = %w\n", err)
 		}
 
-		_ = c.Write("probabilities written")
-		return nil
+		return c.Write("probabilities written\n")
+	}
+}
+
+func (a *APIServer) clearPathProbabilitiesHandler() routing.Handler {
+	return func(c *routing.Context) error {
+		a.Server.PathProbabilities.Clear()
+		return c.Write(fmt.Sprintf("probabilities cleared\n"))
 	}
 }
