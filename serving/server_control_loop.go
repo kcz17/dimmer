@@ -60,9 +60,9 @@ func NewServerControlLoop(
 	return c, nil
 }
 
-func (c *ServerControlLoop) start() {
+func (c *ServerControlLoop) mustStart() {
 	if c.loopStarted {
-		panic("server already started")
+		panic("control loop already started")
 	}
 
 	c.loopStop = make(chan bool, 1)
@@ -73,7 +73,7 @@ func (c *ServerControlLoop) start() {
 	c.loopStarted = true
 }
 
-func (c *ServerControlLoop) restart() {
+func (c *ServerControlLoop) mustStop() {
 	if !c.loopStarted {
 		panic("control loop not yet started")
 	}
@@ -82,18 +82,16 @@ func (c *ServerControlLoop) restart() {
 	// in this order to ensure stale data is not written between each reset.
 	close(c.loopStop)
 	c.loopWG.Wait()
-	// Replace the mutex as we are unsure whether the consumers will exit
-	// gracefully (i.e., the lock is still acquired by a listener while the
-	// server is killed).
-	c.dimmingPercentageMux = &sync.RWMutex{}
-
 	c.responseTimeCollector.Reset()
 	c.pid.Reset()
 
-	c.loopStop = make(chan bool, 1)
-	c.loopWG = &sync.WaitGroup{}
-	c.loopWG.Add(1)
-	go c.controlLoop()
+	// Replace the mutex as we are unsure whether the consumers will exit
+	// gracefully (i.e., the lock is still acquired by a listener while the
+	// server is killed).
+	c.dimmingPercentage = 0.0
+	c.dimmingPercentageMux = &sync.RWMutex{}
+
+	c.loopStarted = false
 }
 
 // readDimmingPercentage retrieves the output of the PID controller as a value

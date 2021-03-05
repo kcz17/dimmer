@@ -41,6 +41,10 @@ type Config struct {
 	ControllerKd           float64 `env:"CONTROLLER_KD"`
 
 	///////////////////////////////////////////////////////////////////////////
+	// Dimming controller.
+	///////////////////////////////////////////////////////////////////////////
+
+	///////////////////////////////////////////////////////////////////////////
 	// Response time data collection.
 	///////////////////////////////////////////////////////////////////////////
 
@@ -75,7 +79,8 @@ func main() {
 	requestFilter := initRequestFilter()
 	pathProbabilities := initPathProbabilities()
 
-	server := serving.Server{
+	// Serve the reverse proxy with dimming control loop.
+	server := serving.NewServer(&serving.ServerOptions{
 		FrontendAddr:                      fmt.Sprintf(":%v", config.FrontEndPort),
 		BackendAddr:                       config.BackEndHost + ":" + config.BackEndPort,
 		MaxConns:                          2048,
@@ -85,10 +90,15 @@ func main() {
 		Logger:                            logger,
 		IsDimmingEnabled:                  config.IsDimmerEnabled,
 		ResponseTimeCollectorExcludesHTML: config.ResponseTimeCollectorExcludesHTML,
+	})
+	if err := server.Start(); err != nil {
+		panic(fmt.Sprintf("expected server.Start() returns nil err; got err = %v", err))
 	}
-	server.Start()
 
-	for {
+	// Serve the API which allows control of the reverse proxy.
+	api := serving.APIServer{Server: server}
+	if err := api.ListenAndServe(":8079"); err != nil {
+		panic(fmt.Errorf("expected api.ListenAndServe() returns nil err; got err = %w", err))
 	}
 }
 

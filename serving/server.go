@@ -1,6 +1,8 @@
 package serving
 
 import (
+	"errors"
+	"fmt"
 	"github.com/kcz17/dimmer/filters"
 	"github.com/kcz17/dimmer/logging"
 	"github.com/valyala/fasthttp"
@@ -8,8 +10,21 @@ import (
 	"math/rand"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
+
+type ServerOptions struct {
+	FrontendAddr                      string
+	BackendAddr                       string
+	MaxConns                          int
+	ControlLoop                       *ServerControlLoop
+	RequestFilter                     *filters.RequestFilter
+	PathProbabilities                 *filters.PathProbabilities
+	Logger                            logging.Logger
+	IsDimmingEnabled                  bool
+	ResponseTimeCollectorExcludesHTML bool
+}
 
 type Server struct {
 	FrontendAddr                      string
@@ -23,14 +38,36 @@ type Server struct {
 	ResponseTimeCollectorExcludesHTML bool
 	// server and proxy is our reverse proxy implementation which allows
 	// requests to be forwarded to the backend host.
-	server    *fasthttp.Server
-	proxy     *fasthttp.HostClient
+	server *fasthttp.Server
+	proxy  *fasthttp.HostClient
+	// apiMutex ensures that only one caller can access Start and Stop at one
+	// time.
+	apiMutex  *sync.Mutex
 	isStarted bool
 }
 
-func (s *Server) Start() {
+func NewServer(options *ServerOptions) *Server {
+	return &Server{
+		FrontendAddr:                      options.FrontendAddr,
+		BackendAddr:                       options.BackendAddr,
+		MaxConns:                          options.MaxConns,
+		ControlLoop:                       options.ControlLoop,
+		RequestFilter:                     options.RequestFilter,
+		PathProbabilities:                 options.PathProbabilities,
+		Logger:                            options.Logger,
+		IsDimmingEnabled:                  options.IsDimmingEnabled,
+		ResponseTimeCollectorExcludesHTML: options.ResponseTimeCollectorExcludesHTML,
+		apiMutex:                          &sync.Mutex{},
+		isStarted:                         false,
+	}
+}
+
+func (s *Server) Start() error {
+	s.apiMutex.Lock()
+	defer s.apiMutex.Unlock()
+
 	if s.isStarted {
-		panic("server already started")
+		return errors.New("server already started")
 	}
 
 	s.proxy = &fasthttp.HostClient{Addr: s.BackendAddr, MaxConns: s.MaxConns}
@@ -39,7 +76,7 @@ func (s *Server) Start() {
 		CloseOnShutdown: true,
 	}
 
-	s.ControlLoop.start()
+	s.ControlLoop.mustStart()
 	go func() {
 		if err := s.server.ListenAndServe(s.FrontendAddr); err != nil {
 			log.Fatalf("fasthttp: server error: %v", err)
@@ -47,29 +84,24 @@ func (s *Server) Start() {
 	}()
 
 	s.isStarted = true
+	return nil
 }
 
-func (s *Server) Restart() {
+func (s *Server) Stop() error {
+	s.apiMutex.Lock()
+	defer s.apiMutex.Unlock()
+
 	if !s.isStarted {
-		panic("server not yet started")
+		return errors.New("server not running")
 	}
 
 	if err := s.server.Shutdown(); err != nil {
-		panic(err)
+		return fmt.Errorf("unable to stop server; s.shutdown.Shutdown() has err = %w", err)
 	}
+	s.ControlLoop.mustStop()
 
-	s.proxy = &fasthttp.HostClient{Addr: s.BackendAddr, MaxConns: s.MaxConns}
-	s.server = &fasthttp.Server{
-		Handler:         s.requestHandler(),
-		CloseOnShutdown: true,
-	}
-
-	s.ControlLoop.restart()
-	go func() {
-		if err := s.server.ListenAndServe(s.FrontendAddr); err != nil {
-			log.Fatalf("fasthttp: server error: %v", err)
-		}
-	}()
+	s.isStarted = false
+	return nil
 }
 
 func (s *Server) requestHandler() fasthttp.RequestHandler {

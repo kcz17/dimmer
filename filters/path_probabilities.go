@@ -21,8 +21,8 @@ type PathProbabilities struct {
 }
 
 type PathProbabilityRule struct {
-	path        string
-	probability float64
+	Path        string
+	Probability float64
 }
 
 func NewPathProbabilities(defaultValue float64) (*PathProbabilities, error) {
@@ -49,15 +49,15 @@ func (p *PathProbabilities) Get(path string) float64 {
 }
 
 func (p *PathProbabilities) Set(rule PathProbabilityRule) error {
-	if rule.probability < 0 || rule.probability > 1 {
-		return errors.New(fmt.Sprintf("PathProbabilities.Set() with path %s expected probability between 0 and 1; got probability = %v", rule.path, rule.probability))
+	if rule.Probability < 0 || rule.Probability > 1 {
+		return errors.New(fmt.Sprintf("PathProbabilities.Set() with path %s expected probability between 0 and 1; got probability = %v", rule.Path, rule.Probability))
 	}
 
 	// Ensure rules exist for the path both with and without a trailing slash.
-	path := prependLeadingSlashIfMissing(rule.path)
+	path := prependLeadingSlashIfMissing(rule.Path)
 	p.probabilitiesMux.Lock()
-	p.probabilities[path] = rule.probability
-	p.probabilities[path[1:]] = rule.probability
+	p.probabilities[path] = rule.Probability
+	p.probabilities[path[1:]] = rule.Probability
 	p.probabilitiesMux.Unlock()
 
 	return nil
