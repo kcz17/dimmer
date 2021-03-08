@@ -34,6 +34,15 @@ func (c *arrayCollector) Aggregate() *Aggregation {
 	c.responseTimesSecondsMux.Lock()
 	defer c.responseTimesSecondsMux.Unlock()
 
+	// The stats package requires input arrays to be non-empty.
+	if len(c.responseTimesSeconds) == 0 {
+		return &Aggregation{
+			P50: 0,
+			P75: 0,
+			P95: 0,
+		}
+	}
+
 	p50, err := stats.Median(c.responseTimesSeconds)
 	if err != nil {
 		panic(fmt.Errorf("unexpected err in ArrayCollector.Aggregate() while calculating p50: %w", err))
