@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/kcz17/dimmer/filters"
 	"github.com/kcz17/dimmer/logging"
+	"github.com/kcz17/dimmer/monitoring/responsetime"
 	"github.com/valyala/fasthttp"
 	"log"
 	"math/rand"
@@ -21,6 +22,7 @@ type ServerOptions struct {
 	ControlLoop                       *ServerControlLoop
 	RequestFilter                     *filters.RequestFilter
 	PathProbabilities                 *filters.PathProbabilities
+	ExtResponseTimeCollector          responsetime.Collector
 	Logger                            logging.Logger
 	IsDimmingEnabled                  bool
 	ResponseTimeCollectorExcludesHTML bool
@@ -44,6 +46,10 @@ type Server struct {
 	// time.
 	apiMutex  *sync.Mutex
 	isStarted bool
+	// ExtResponseTimeCollector allows external clients to monitor the response
+	// time. The collector is disabled by default.
+	ExtResponseTimeCollector          responsetime.Collector
+	isExtResponseTimeCollectorStarted bool
 }
 
 func NewServer(options *ServerOptions) *Server {
@@ -59,6 +65,8 @@ func NewServer(options *ServerOptions) *Server {
 		ResponseTimeCollectorExcludesHTML: options.ResponseTimeCollectorExcludesHTML,
 		apiMutex:                          &sync.Mutex{},
 		isStarted:                         false,
+		ExtResponseTimeCollector:          options.ExtResponseTimeCollector,
+		isExtResponseTimeCollectorStarted: false,
 	}
 }
 
@@ -104,6 +112,24 @@ func (s *Server) Stop() error {
 	return nil
 }
 
+func (s *Server) StartExtResponseTimeCollector() {
+	s.apiMutex.Lock()
+	defer s.apiMutex.Unlock()
+	if !s.isExtResponseTimeCollectorStarted {
+		s.ExtResponseTimeCollector.Reset()
+	}
+	s.isExtResponseTimeCollectorStarted = true
+}
+
+func (s *Server) StopExtResponseTimeCollector() {
+	s.apiMutex.Lock()
+	defer s.apiMutex.Unlock()
+	if s.isExtResponseTimeCollectorStarted {
+		s.ExtResponseTimeCollector.Reset()
+	}
+	s.isExtResponseTimeCollectorStarted = false
+}
+
 func (s *Server) requestHandler() fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		req := &ctx.Request
@@ -138,6 +164,9 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 		if !s.ResponseTimeCollectorExcludesHTML || !strings.Contains(string(ctx.Path()), ".html") {
 			s.Logger.LogResponseTime(float64(duration) / float64(time.Second))
 			s.ControlLoop.addResponseTime(duration)
+			if s.isExtResponseTimeCollectorStarted {
+				s.ExtResponseTimeCollector.Add(duration)
+			}
 		}
 
 		// Remove connection header per RFC2616.
