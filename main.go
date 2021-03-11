@@ -79,10 +79,6 @@ func main() {
 	requestFilter := initRequestFilter()
 	pathProbabilities := initPathProbabilities()
 
-	// If the admin API puts the server into training mode, the server will use
-	// the array collector.
-	extResponseTimeCollector := responsetime.NewArrayCollector()
-
 	// Serve the reverse proxy with dimming control loop.
 	server := serving.NewServer(&serving.ServerOptions{
 		FrontendAddr:                      fmt.Sprintf(":%v", config.FrontEndPort),
@@ -91,7 +87,6 @@ func main() {
 		ControlLoop:                       controlLoop,
 		RequestFilter:                     requestFilter,
 		PathProbabilities:                 pathProbabilities,
-		ExtResponseTimeCollector:          extResponseTimeCollector,
 		Logger:                            logger,
 		IsDimmingEnabled:                  config.IsDimmerEnabled,
 		ResponseTimeCollectorExcludesHTML: config.ResponseTimeCollectorExcludesHTML,

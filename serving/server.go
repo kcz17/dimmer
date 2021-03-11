@@ -2,7 +2,6 @@ package serving
 
 import (
 	"errors"
-	"fmt"
 	"github.com/kcz17/dimmer/filters"
 	"github.com/kcz17/dimmer/logging"
 	"github.com/kcz17/dimmer/monitoring/responsetime"
@@ -22,71 +21,110 @@ type ServerOptions struct {
 	ControlLoop                       *ServerControlLoop
 	RequestFilter                     *filters.RequestFilter
 	PathProbabilities                 *filters.PathProbabilities
-	ExtResponseTimeCollector          responsetime.Collector
 	Logger                            logging.Logger
 	IsDimmingEnabled                  bool
 	ResponseTimeCollectorExcludesHTML bool
 }
 
+// Server is a dimming-enhanced server. Dimming is actuated using a control
+// loop in s.requestHandler, which uses allows dimming on select paths, with
+// each path associated with a probability it will be dimmed.
 type Server struct {
-	FrontendAddr                      string
-	BackendAddr                       string
-	MaxConns                          int
-	ControlLoop                       *ServerControlLoop
-	RequestFilter                     *filters.RequestFilter
-	PathProbabilities                 *filters.PathProbabilities
-	Logger                            logging.Logger
-	IsDimmingEnabled                  bool
-	ResponseTimeCollectorExcludesHTML bool
-	// server and proxy is our reverse proxy implementation which allows
-	// requests to be forwarded to the backend host.
-	server *fasthttp.Server
-	proxy  *fasthttp.HostClient
-	// apiMutex ensures that only one caller can access Start and Stop at one
-	// time.
-	apiMutex  *sync.Mutex
+	logger   logging.Logger
+	proxying struct {
+		FrontendAddr string
+		BackendAddr  string
+		MaxConns     int
+		// server and proxy implement our reverse proxy, allowing requests
+		// to be forwarded to the backend host.
+		server *fasthttp.Server
+		proxy  *fasthttp.HostClient
+	}
+	dimming struct {
+		// IsDimmingEnabled states whether dimming should be enabled at
+		// production-time.
+		IsDimmingEnabled bool
+		// ControlLoop reads the response time of the server and adjusts the
+		// dimming percentage at regular intervals.
+		ControlLoop                       *ServerControlLoop
+		RequestFilter                     *filters.RequestFilter
+		PathProbabilities                 *filters.PathProbabilities
+		ResponseTimeCollectorExcludesHTML bool
+	}
+	// offlineTraining represents the offline training mode. When this mode is
+	// enabled, all paths under RequestFilter will be dimmed according to
+	// PathProbabilities, regardless of the ControlLoop output.
+	offlineTraining struct {
+		// ExtResponseTimeCollector allows external clients to monitor the response
+		// time. The collector is disabled by default.
+		ExtResponseTimeCollector          responsetime.Collector
+		isExtResponseTimeCollectorStarted bool
+	}
+	// isStarted is checked to ensure each Server is only ever started once.
 	isStarted bool
-	// ExtResponseTimeCollector allows external clients to monitor the response
-	// time. The collector is disabled by default.
-	ExtResponseTimeCollector          responsetime.Collector
-	isExtResponseTimeCollectorStarted bool
+	// mux synchronises server operations which can be called concurrently,
+	// e.g., via the offline training API.
+	mux *sync.Mutex
 }
 
 func NewServer(options *ServerOptions) *Server {
 	return &Server{
-		FrontendAddr:                      options.FrontendAddr,
-		BackendAddr:                       options.BackendAddr,
-		MaxConns:                          options.MaxConns,
-		ControlLoop:                       options.ControlLoop,
-		RequestFilter:                     options.RequestFilter,
-		PathProbabilities:                 options.PathProbabilities,
-		Logger:                            options.Logger,
-		IsDimmingEnabled:                  options.IsDimmingEnabled,
-		ResponseTimeCollectorExcludesHTML: options.ResponseTimeCollectorExcludesHTML,
-		apiMutex:                          &sync.Mutex{},
-		isStarted:                         false,
-		ExtResponseTimeCollector:          options.ExtResponseTimeCollector,
-		isExtResponseTimeCollectorStarted: false,
+		logger: options.Logger,
+		proxying: struct {
+			FrontendAddr string
+			BackendAddr  string
+			MaxConns     int
+			server       *fasthttp.Server
+			proxy        *fasthttp.HostClient
+		}{
+			FrontendAddr: options.FrontendAddr,
+			BackendAddr:  options.BackendAddr,
+			MaxConns:     options.MaxConns,
+			server:       nil,
+			proxy:        nil,
+		},
+		dimming: struct {
+			IsDimmingEnabled                  bool
+			ControlLoop                       *ServerControlLoop
+			RequestFilter                     *filters.RequestFilter
+			PathProbabilities                 *filters.PathProbabilities
+			ResponseTimeCollectorExcludesHTML bool
+		}{
+			ControlLoop:                       options.ControlLoop,
+			RequestFilter:                     options.RequestFilter,
+			PathProbabilities:                 options.PathProbabilities,
+			IsDimmingEnabled:                  options.IsDimmingEnabled,
+			ResponseTimeCollectorExcludesHTML: options.ResponseTimeCollectorExcludesHTML,
+		},
+		offlineTraining: struct {
+			ExtResponseTimeCollector          responsetime.Collector
+			isExtResponseTimeCollectorStarted bool
+		}{
+			ExtResponseTimeCollector:          responsetime.NewArrayCollector(),
+			isExtResponseTimeCollectorStarted: false,
+		},
+		isStarted: false,
+		mux:       &sync.Mutex{},
 	}
 }
 
 func (s *Server) Start() error {
-	s.apiMutex.Lock()
-	defer s.apiMutex.Unlock()
+	s.mux.Lock()
+	defer s.mux.Unlock()
 
 	if s.isStarted {
 		return errors.New("server already started")
 	}
 
-	s.proxy = &fasthttp.HostClient{Addr: s.BackendAddr, MaxConns: s.MaxConns}
-	s.server = &fasthttp.Server{
+	s.proxying.proxy = &fasthttp.HostClient{Addr: s.proxying.BackendAddr, MaxConns: s.proxying.MaxConns}
+	s.proxying.server = &fasthttp.Server{
 		Handler:         s.requestHandler(),
 		CloseOnShutdown: true,
 	}
 
-	s.ControlLoop.mustStart()
+	s.dimming.ControlLoop.mustStart()
 	go func() {
-		if err := s.server.ListenAndServe(s.FrontendAddr); err != nil {
+		if err := s.proxying.server.ListenAndServe(s.proxying.FrontendAddr); err != nil {
 			log.Fatalf("fasthttp: server error: %v", err)
 		}
 	}()
@@ -95,53 +133,36 @@ func (s *Server) Start() error {
 	return nil
 }
 
-func (s *Server) Stop() error {
-	s.apiMutex.Lock()
-	defer s.apiMutex.Unlock()
-
-	if !s.isStarted {
-		return errors.New("server not running")
-	}
-
-	if err := s.server.Shutdown(); err != nil {
-		return fmt.Errorf("unable to stop server; s.shutdown.Shutdown() has err = %w", err)
-	}
-	s.ControlLoop.mustStop()
-
-	s.isStarted = false
-	return nil
-}
-
 func (s *Server) ResetControlLoop() error {
-	s.apiMutex.Lock()
-	defer s.apiMutex.Unlock()
+	s.mux.Lock()
+	defer s.mux.Unlock()
 
 	if !s.isStarted {
 		return errors.New("server not running")
 	}
 
-	s.ControlLoop.mustStop()
-	s.ControlLoop.mustStart()
+	s.dimming.ControlLoop.mustStop()
+	s.dimming.ControlLoop.mustStart()
 
 	return nil
 }
 
 func (s *Server) StartExtResponseTimeCollector() {
-	s.apiMutex.Lock()
-	defer s.apiMutex.Unlock()
-	if !s.isExtResponseTimeCollectorStarted {
-		s.ExtResponseTimeCollector.Reset()
+	s.mux.Lock()
+	defer s.mux.Unlock()
+	if !s.offlineTraining.isExtResponseTimeCollectorStarted {
+		s.offlineTraining.ExtResponseTimeCollector.Reset()
 	}
-	s.isExtResponseTimeCollectorStarted = true
+	s.offlineTraining.isExtResponseTimeCollectorStarted = true
 }
 
 func (s *Server) StopExtResponseTimeCollector() {
-	s.apiMutex.Lock()
-	defer s.apiMutex.Unlock()
-	if s.isExtResponseTimeCollectorStarted {
-		s.ExtResponseTimeCollector.Reset()
+	s.mux.Lock()
+	defer s.mux.Unlock()
+	if s.offlineTraining.isExtResponseTimeCollectorStarted {
+		s.offlineTraining.ExtResponseTimeCollector.Reset()
 	}
-	s.isExtResponseTimeCollectorStarted = false
+	s.offlineTraining.isExtResponseTimeCollectorStarted = false
 }
 
 func (s *Server) requestHandler() fasthttp.RequestHandler {
@@ -151,10 +172,10 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 
 		// If dimming is enabled, enforce dimming on dimmable components by
 		// returning a HTTP error page if a probability is met.
-		if s.IsDimmingEnabled && s.RequestFilter.Matches(string(ctx.Path()), string(ctx.Method()), string(req.Header.Referer())) {
-			if rand.Float64()*100 < s.ControlLoop.readDimmingPercentage() {
+		if s.dimming.IsDimmingEnabled && s.dimming.RequestFilter.Matches(string(ctx.Path()), string(ctx.Method()), string(req.Header.Referer())) {
+			if rand.Float64()*100 < s.dimming.ControlLoop.readDimmingPercentage() {
 				// Dim based on probabilities set with PathProbabilities.
-				if rand.Float64() < s.PathProbabilities.Get(string(ctx.Path())) {
+				if rand.Float64() < s.dimming.PathProbabilities.Get(string(ctx.Path())) {
 					ctx.Error("dimming", http.StatusTooManyRequests)
 					return
 				}
@@ -168,18 +189,18 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 
 		// Proxy the request, capturing the request time.
 		startTime := time.Now()
-		if err := s.proxy.Do(req, resp); err != nil {
+		if err := s.proxying.proxy.Do(req, resp); err != nil {
 			ctx.Logger().Printf("fasthttp: error when proxying the request: %v", err)
 		}
 		duration := time.Now().Sub(startTime)
 
 		// Persist the request time, excluding static .html files if the option
 		// for exclusion is enabled.
-		if !s.ResponseTimeCollectorExcludesHTML || !strings.Contains(string(ctx.Path()), ".html") {
-			s.Logger.LogResponseTime(float64(duration) / float64(time.Second))
-			s.ControlLoop.addResponseTime(duration)
-			if s.isExtResponseTimeCollectorStarted {
-				s.ExtResponseTimeCollector.Add(duration)
+		if !s.dimming.ResponseTimeCollectorExcludesHTML || !strings.Contains(string(ctx.Path()), ".html") {
+			s.logger.LogResponseTime(float64(duration) / float64(time.Second))
+			s.dimming.ControlLoop.addResponseTime(duration)
+			if s.offlineTraining.isExtResponseTimeCollectorStarted {
+				s.offlineTraining.ExtResponseTimeCollector.Add(duration)
 			}
 		}
 
