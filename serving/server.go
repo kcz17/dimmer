@@ -179,7 +179,8 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 		// components by returning a HTTP error page if a probability is met.
 		if (s.dimming.IsEnabled || s.offlineTraining.IsEnabled) &&
 			s.dimming.RequestFilter.Matches(string(ctx.Path()), string(ctx.Method()), string(req.Header.Referer())) {
-			if rand.Float64()*100 < s.dimming.ControlLoop.readDimmingPercentage() {
+			// If offline training is enabled, we always dim.
+			if s.offlineTraining.IsEnabled || rand.Float64()*100 < s.dimming.ControlLoop.readDimmingPercentage() {
 				// Dim based on probabilities set with PathProbabilities.
 				if rand.Float64() < s.dimming.PathProbabilities.Get(string(ctx.Path())) {
 					ctx.Error("dimming", http.StatusTooManyRequests)
