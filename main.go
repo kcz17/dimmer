@@ -95,8 +95,7 @@ func main() {
 		panic(fmt.Sprintf("expected server.Start() returns nil err; got err = %v", err))
 	}
 
-	// Serve the API which allows control of the reverse proxy.
-	api := serving.APIServer{Server: server}
+	api := serving.OfflineTrainingAPIServer{Server: server}
 	if err := api.ListenAndServe(":8079"); err != nil {
 		panic(fmt.Errorf("expected api.ListenAndServe() returns nil err; got err = %w", err))
 	}

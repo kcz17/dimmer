@@ -41,9 +41,9 @@ type Server struct {
 		proxy  *fasthttp.HostClient
 	}
 	dimming struct {
-		// IsDimmingEnabled states whether dimming should be enabled at
+		// IsEnabled states whether dimming should be enabled at
 		// production-time.
-		IsDimmingEnabled bool
+		IsEnabled bool
 		// ControlLoop reads the response time of the server and adjusts the
 		// dimming percentage at regular intervals.
 		ControlLoop                       *ServerControlLoop
@@ -55,16 +55,16 @@ type Server struct {
 	// enabled, all paths under RequestFilter will be dimmed according to
 	// PathProbabilities, regardless of the ControlLoop output.
 	offlineTraining struct {
-		// ExtResponseTimeCollector allows external clients to monitor the response
+		IsEnabled bool
+		// ResponseTimeCollector allows external clients to monitor the response
 		// time. The collector is disabled by default.
-		ExtResponseTimeCollector          responsetime.Collector
-		isExtResponseTimeCollectorStarted bool
+		ResponseTimeCollector responsetime.Collector
 	}
 	// isStarted is checked to ensure each Server is only ever started once.
 	isStarted bool
 	// mux synchronises server operations which can be called concurrently,
 	// e.g., via the offline training API.
-	mux *sync.Mutex
+	mux *sync.RWMutex
 }
 
 func NewServer(options *ServerOptions) *Server {
@@ -84,7 +84,7 @@ func NewServer(options *ServerOptions) *Server {
 			proxy:        nil,
 		},
 		dimming: struct {
-			IsDimmingEnabled                  bool
+			IsEnabled                         bool
 			ControlLoop                       *ServerControlLoop
 			RequestFilter                     *filters.RequestFilter
 			PathProbabilities                 *filters.PathProbabilities
@@ -93,18 +93,18 @@ func NewServer(options *ServerOptions) *Server {
 			ControlLoop:                       options.ControlLoop,
 			RequestFilter:                     options.RequestFilter,
 			PathProbabilities:                 options.PathProbabilities,
-			IsDimmingEnabled:                  options.IsDimmingEnabled,
+			IsEnabled:                         options.IsDimmingEnabled,
 			ResponseTimeCollectorExcludesHTML: options.ResponseTimeCollectorExcludesHTML,
 		},
 		offlineTraining: struct {
-			ExtResponseTimeCollector          responsetime.Collector
-			isExtResponseTimeCollectorStarted bool
+			IsEnabled             bool
+			ResponseTimeCollector responsetime.Collector
 		}{
-			ExtResponseTimeCollector:          responsetime.NewArrayCollector(),
-			isExtResponseTimeCollectorStarted: false,
+			IsEnabled:             false,
+			ResponseTimeCollector: responsetime.NewArrayCollector(),
 		},
 		isStarted: false,
-		mux:       &sync.Mutex{},
+		mux:       &sync.RWMutex{},
 	}
 }
 
@@ -133,36 +133,36 @@ func (s *Server) Start() error {
 	return nil
 }
 
-func (s *Server) ResetControlLoop() error {
+func (s *Server) StartOfflineTrainingMode() error {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 
 	if !s.isStarted {
-		return errors.New("server not running")
+		return errors.New("StartOfflineTrainingMode() expected server running; server is not running")
 	}
 
+	s.offlineTraining.ResponseTimeCollector.Reset()
 	s.dimming.ControlLoop.mustStop()
 	s.dimming.ControlLoop.mustStart()
 
+	s.offlineTraining.IsEnabled = true
 	return nil
 }
 
-func (s *Server) StartExtResponseTimeCollector() {
+func (s *Server) StopOfflineTrainingMode() error {
 	s.mux.Lock()
 	defer s.mux.Unlock()
-	if !s.offlineTraining.isExtResponseTimeCollectorStarted {
-		s.offlineTraining.ExtResponseTimeCollector.Reset()
-	}
-	s.offlineTraining.isExtResponseTimeCollectorStarted = true
-}
 
-func (s *Server) StopExtResponseTimeCollector() {
-	s.mux.Lock()
-	defer s.mux.Unlock()
-	if s.offlineTraining.isExtResponseTimeCollectorStarted {
-		s.offlineTraining.ExtResponseTimeCollector.Reset()
+	if !s.isStarted {
+		return errors.New("StopOfflineTrainingMode() expected server running; server is not running")
 	}
-	s.offlineTraining.isExtResponseTimeCollectorStarted = false
+
+	s.offlineTraining.ResponseTimeCollector.Reset()
+	s.dimming.ControlLoop.mustStop()
+	s.dimming.ControlLoop.mustStart()
+
+	s.offlineTraining.IsEnabled = false
+	return nil
 }
 
 func (s *Server) requestHandler() fasthttp.RequestHandler {
@@ -170,17 +170,27 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 		req := &ctx.Request
 		resp := &ctx.Response
 
-		// If dimming is enabled, enforce dimming on dimmable components by
-		// returning a HTTP error page if a probability is met.
-		if s.dimming.IsDimmingEnabled && s.dimming.RequestFilter.Matches(string(ctx.Path()), string(ctx.Method()), string(req.Header.Referer())) {
+		// Requests can still run as training mode is changed and the control
+		// loop is reset. Read locking while dimming decisions are made will
+		// synchronise changes to the server to prevent data races.
+		s.mux.RLock()
+
+		// If dimming or training mode is enabled, enforce dimming on dimmable
+		// components by returning a HTTP error page if a probability is met.
+		if (s.dimming.IsEnabled || s.offlineTraining.IsEnabled) &&
+			s.dimming.RequestFilter.Matches(string(ctx.Path()), string(ctx.Method()), string(req.Header.Referer())) {
 			if rand.Float64()*100 < s.dimming.ControlLoop.readDimmingPercentage() {
 				// Dim based on probabilities set with PathProbabilities.
 				if rand.Float64() < s.dimming.PathProbabilities.Get(string(ctx.Path())) {
 					ctx.Error("dimming", http.StatusTooManyRequests)
+					s.mux.RUnlock()
 					return
 				}
 			}
 		}
+
+		// Unlock the read lock before proxying is made.
+		s.mux.RUnlock()
 
 		// Remove connection header per RFC2616.
 		func(req *fasthttp.Request) {
@@ -195,14 +205,18 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 		duration := time.Now().Sub(startTime)
 
 		// Persist the request time, excluding static .html files if the option
-		// for exclusion is enabled.
+		// for exclusion is enabled. This happens regardless of whether dimming
+		// is actually enabled, so we still get visibility into what the dimmer
+		// would otherwise do.
+		s.mux.RLock()
 		if !s.dimming.ResponseTimeCollectorExcludesHTML || !strings.Contains(string(ctx.Path()), ".html") {
 			s.logger.LogResponseTime(float64(duration) / float64(time.Second))
 			s.dimming.ControlLoop.addResponseTime(duration)
-			if s.offlineTraining.isExtResponseTimeCollectorStarted {
-				s.offlineTraining.ExtResponseTimeCollector.Add(duration)
+			if s.offlineTraining.IsEnabled {
+				s.offlineTraining.ResponseTimeCollector.Add(duration)
 			}
 		}
+		s.mux.RUnlock()
 
 		// Remove connection header per RFC2616.
 		func(resp *fasthttp.Response) {

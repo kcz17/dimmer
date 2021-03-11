@@ -85,9 +85,6 @@ func (c *ServerControlLoop) mustStop() {
 	c.responseTimeCollector.Reset()
 	c.pid.Reset()
 
-	// Replace the mutex as we are unsure whether the consumers will exit
-	// gracefully (i.e., the lock is still acquired by a listener while the
-	// server is killed).
 	c.dimmingPercentageMux.Lock()
 	c.dimmingPercentage = 0.0
 	c.dimmingPercentageMux.Unlock()
@@ -101,9 +98,8 @@ func (c *ServerControlLoop) readDimmingPercentage() float64 {
 	// A mutex is used to ensure no race conditions occur as the control loop
 	// runs and overwrites the dimming percentage.
 	c.dimmingPercentageMux.RLock()
-	dimmingPercentage := c.dimmingPercentage
-	c.dimmingPercentageMux.RUnlock()
-	return dimmingPercentage
+	defer c.dimmingPercentageMux.RUnlock()
+	return c.dimmingPercentage
 }
 
 // addResponseTime adds a new response time to the response time collector,
