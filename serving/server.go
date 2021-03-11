@@ -112,6 +112,20 @@ func (s *Server) Stop() error {
 	return nil
 }
 
+func (s *Server) ResetControlLoop() error {
+	s.apiMutex.Lock()
+	defer s.apiMutex.Unlock()
+
+	if !s.isStarted {
+		return errors.New("server not running")
+	}
+
+	s.ControlLoop.mustStop()
+	s.ControlLoop.mustStart()
+
+	return nil
+}
+
 func (s *Server) StartExtResponseTimeCollector() {
 	s.apiMutex.Lock()
 	defer s.apiMutex.Unlock()

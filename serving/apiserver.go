@@ -18,6 +18,7 @@ func (a *APIServer) ListenAndServe(addr string) error {
 
 	router.Post("/start", a.startHandler())
 	router.Post("/stop", a.stopHandler())
+	router.Post("/reset", a.resetControlLoopHandler())
 
 	router.Get("/probabilities", a.listPathProbabilitiesHandler())
 	router.Post("/probabilities", a.setPathProbabilitiesHandler())
@@ -47,6 +48,16 @@ func (a *APIServer) stopHandler() routing.Handler {
 		}
 
 		return c.Write("server stopped\n")
+	}
+}
+
+func (a *APIServer) resetControlLoopHandler() routing.Handler {
+	return func(c *routing.Context) error {
+		if err := a.Server.ResetControlLoop(); err != nil {
+			return fmt.Errorf("could not reset control loop: err = %w\n", err)
+		}
+
+		return c.Write("server control loop reset\n")
 	}
 }
 

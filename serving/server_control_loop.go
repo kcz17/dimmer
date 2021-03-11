@@ -88,8 +88,9 @@ func (c *ServerControlLoop) mustStop() {
 	// Replace the mutex as we are unsure whether the consumers will exit
 	// gracefully (i.e., the lock is still acquired by a listener while the
 	// server is killed).
+	c.dimmingPercentageMux.Lock()
 	c.dimmingPercentage = 0.0
-	c.dimmingPercentageMux = &sync.RWMutex{}
+	c.dimmingPercentageMux.Unlock()
 
 	c.loopStarted = false
 }
