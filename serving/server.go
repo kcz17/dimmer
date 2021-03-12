@@ -10,7 +10,6 @@ import (
 	"math/rand"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -62,9 +61,6 @@ type Server struct {
 	}
 	// isStarted is checked to ensure each Server is only ever started once.
 	isStarted bool
-	// mux synchronises server operations which can be called concurrently,
-	// e.g., via the offline training API.
-	mux *sync.RWMutex
 }
 
 func NewServer(options *ServerOptions) *Server {
@@ -104,14 +100,10 @@ func NewServer(options *ServerOptions) *Server {
 			ResponseTimeCollector: responsetime.NewArrayCollector(),
 		},
 		isStarted: false,
-		mux:       &sync.RWMutex{},
 	}
 }
 
 func (s *Server) Start() error {
-	s.mux.Lock()
-	defer s.mux.Unlock()
-
 	if s.isStarted {
 		return errors.New("server already started")
 	}
@@ -134,9 +126,6 @@ func (s *Server) Start() error {
 }
 
 func (s *Server) StartOfflineTrainingMode() error {
-	s.mux.Lock()
-	defer s.mux.Unlock()
-
 	if !s.isStarted {
 		return errors.New("StartOfflineTrainingMode() expected server running; server is not running")
 	}
@@ -150,9 +139,6 @@ func (s *Server) StartOfflineTrainingMode() error {
 }
 
 func (s *Server) StopOfflineTrainingMode() error {
-	s.mux.Lock()
-	defer s.mux.Unlock()
-
 	if !s.isStarted {
 		return errors.New("StopOfflineTrainingMode() expected server running; server is not running")
 	}
@@ -170,11 +156,6 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 		req := &ctx.Request
 		resp := &ctx.Response
 
-		// Requests can still run as training mode is changed and the control
-		// loop is reset. Read locking while dimming decisions are made will
-		// synchronise changes to the server to prevent data races.
-		s.mux.RLock()
-
 		// If dimming or training mode is enabled, enforce dimming on dimmable
 		// components by returning a HTTP error page if a probability is met.
 		if (s.dimming.IsEnabled || s.offlineTraining.IsEnabled) &&
@@ -184,14 +165,10 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 				// Dim based on probabilities set with PathProbabilities.
 				if rand.Float64() < s.dimming.PathProbabilities.Get(string(ctx.Path())) {
 					ctx.Error("dimming", http.StatusTooManyRequests)
-					s.mux.RUnlock()
 					return
 				}
 			}
 		}
-
-		// Unlock the read lock before proxying is made.
-		s.mux.RUnlock()
 
 		// Remove connection header per RFC2616.
 		func(req *fasthttp.Request) {
@@ -209,7 +186,6 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 		// for exclusion is enabled. This happens regardless of whether dimming
 		// is actually enabled, so we still get visibility into what the dimmer
 		// would otherwise do.
-		s.mux.RLock()
 		if !s.dimming.ResponseTimeCollectorExcludesHTML || !strings.Contains(string(ctx.Path()), ".html") {
 			s.logger.LogResponseTime(float64(duration) / float64(time.Second))
 			s.dimming.ControlLoop.addResponseTime(duration)
@@ -217,7 +193,6 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 				s.offlineTraining.ResponseTimeCollector.Add(duration)
 			}
 		}
-		s.mux.RUnlock()
 
 		// Remove connection header per RFC2616.
 		func(resp *fasthttp.Response) {
