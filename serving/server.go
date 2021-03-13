@@ -187,7 +187,6 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 		// is actually enabled, so we still get visibility into what the dimmer
 		// would otherwise do.
 		if !s.dimming.ResponseTimeCollectorExcludesHTML || !strings.Contains(string(ctx.Path()), ".html") {
-			s.logger.LogResponseTime(float64(duration) / float64(time.Second))
 			s.dimming.ControlLoop.addResponseTime(duration)
 			if s.offlineTraining.IsEnabled {
 				s.offlineTraining.ResponseTimeCollector.Add(duration)
