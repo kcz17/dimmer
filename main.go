@@ -118,7 +118,6 @@ func initLogger(config *Config) logging.Logger {
 func initRequestFilter() *filters.RequestFilter {
 	filter := filters.NewRequestFilter()
 	filter.AddPathForAllMethods("recommender")
-	filter.AddPathForAllMethods("news.html")
 	filter.AddPathForAllMethods("news")
 	filter.AddPath("cart", "GET")
 	if err := filter.AddRefererExclusion("cart", "GET", "basket.html"); err != nil {
