@@ -85,9 +85,14 @@ func main() {
 		Logger:            logger,
 		IsDimmingEnabled:  config.IsDimmerEnabled,
 	})
-	if err := server.Start(); err != nil {
-		panic(fmt.Sprintf("expected server.Start() returns nil err; got err = %v", err))
-	}
+
+	// Start the server in a goroutine so we can separately block the main
+	// thread on the following API server.
+	go func() {
+		if err := server.ListenAndServe(); err != nil {
+			panic(fmt.Sprintf("expected server.ListenAndServe() returns nil err; got err = %v", err))
+		}
+	}()
 
 	api := OfflineTrainingAPIServer{Server: server}
 	if err := api.ListenAndServe(":8079"); err != nil {

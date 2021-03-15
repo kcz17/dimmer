@@ -7,10 +7,10 @@ import (
 	"github.com/kcz17/dimmer/logging"
 	"github.com/kcz17/dimmer/responsetimecollector"
 	"github.com/valyala/fasthttp"
-	"log"
 	"math/rand"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -60,6 +60,8 @@ type Server struct {
 	}
 	// isStarted is checked to ensure each Server is only ever started once.
 	isStarted bool
+	// startStopMux guards external operations which interact with the server.
+	startStopMux *sync.Mutex
 }
 
 func NewServer(options *ServerOptions) *Server {
@@ -96,11 +98,15 @@ func NewServer(options *ServerOptions) *Server {
 			IsEnabled:             false,
 			ResponseTimeCollector: responsetimecollector.NewArrayCollector(),
 		},
-		isStarted: false,
+		isStarted:    false,
+		startStopMux: &sync.Mutex{},
 	}
 }
 
-func (s *Server) Start() error {
+func (s *Server) ListenAndServe() error {
+	s.startStopMux.Lock()
+	defer s.startStopMux.Unlock()
+
 	if s.isStarted {
 		return errors.New("server already started")
 	}
@@ -112,19 +118,21 @@ func (s *Server) Start() error {
 	}
 
 	if err := s.dimming.ControlLoop.Start(); err != nil {
-		return fmt.Errorf("Server.Start() got err when calling ControlLoop.Start(): %w", err)
+		return fmt.Errorf("Server.ListenAndServe() got err when calling ControlLoop.ListenAndServe(): %w", err)
 	}
-	go func() {
-		if err := s.proxying.server.ListenAndServe(s.proxying.FrontendAddr); err != nil {
-			log.Fatalf("fasthttp: server error: %v", err)
-		}
-	}()
+
+	if err := s.proxying.server.ListenAndServe(s.proxying.FrontendAddr); err != nil {
+		return fmt.Errorf("Server.ListenAndServe() got fasthttp server error: %w", err)
+	}
 
 	s.isStarted = true
 	return nil
 }
 
 func (s *Server) StartOfflineTrainingMode() error {
+	s.startStopMux.Lock()
+	defer s.startStopMux.Unlock()
+
 	if !s.isStarted {
 		return errors.New("StartOfflineTrainingMode() expected server running; server is not running")
 	}
@@ -134,7 +142,7 @@ func (s *Server) StartOfflineTrainingMode() error {
 		return fmt.Errorf("Server.StartOfflineTrainingMode() got err when calling ControlLoop.Stop(): %w", err)
 	}
 	if err := s.dimming.ControlLoop.Start(); err != nil {
-		return fmt.Errorf("Server.StartOfflineTrainingMode() got err when calling ControlLoop.Start(): %w", err)
+		return fmt.Errorf("Server.StartOfflineTrainingMode() got err when calling ControlLoop.ListenAndServe(): %w", err)
 	}
 
 	s.offlineTraining.IsEnabled = true
@@ -142,6 +150,9 @@ func (s *Server) StartOfflineTrainingMode() error {
 }
 
 func (s *Server) StopOfflineTrainingMode() error {
+	s.startStopMux.Lock()
+	defer s.startStopMux.Unlock()
+
 	if !s.isStarted {
 		return errors.New("StopOfflineTrainingMode() expected server running; server is not running")
 	}
@@ -151,7 +162,7 @@ func (s *Server) StopOfflineTrainingMode() error {
 		return fmt.Errorf("Server.StopOfflineTrainingMode() got err when calling ControlLoop.Stop(): %w", err)
 	}
 	if err := s.dimming.ControlLoop.Start(); err != nil {
-		return fmt.Errorf("Server.StopOfflineTrainingMode() got err when calling ControlLoop.Start(): %w", err)
+		return fmt.Errorf("Server.StopOfflineTrainingMode() got err when calling ControlLoop.ListenAndServe(): %w", err)
 	}
 
 	s.offlineTraining.IsEnabled = false
