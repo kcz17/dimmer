@@ -176,10 +176,14 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 
 		// If dimming or training mode is enabled, enforce dimming on dimmable
 		// components by returning a HTTP error page if a probability is met.
-		if (s.dimming.IsEnabled || s.offlineTraining.IsEnabled) &&
-			s.dimming.RequestFilter.Matches(string(ctx.Path()), string(ctx.Method()), string(req.Header.Referer())) {
-			// If offline training is enabled, we always dim.
-			if s.offlineTraining.IsEnabled || rand.Float64()*100 < s.dimming.ControlLoop.readDimmingPercentage() {
+		isDimmingEnabled := s.dimming.IsEnabled || s.offlineTraining.IsEnabled
+		isDimmableRequest := s.dimming.RequestFilter.Matches(string(ctx.Path()), string(ctx.Method()), string(req.Header.Referer()))
+		if isDimmingEnabled && isDimmableRequest {
+			// If offline training is enabled, we always dim. We use a nested
+			// conditional to reduce the mutex overhead of reading the dimming
+			// percentage.
+			shouldDim := s.offlineTraining.IsEnabled || rand.Float64()*100 < s.dimming.ControlLoop.readDimmingPercentage()
+			if shouldDim {
 				// Dim based on probabilities set with PathProbabilities.
 				if rand.Float64() < s.dimming.PathProbabilities.Get(string(ctx.Path())) {
 					ctx.Error("dimming", http.StatusTooManyRequests)
