@@ -49,10 +49,12 @@ type Server struct {
 		RequestFilter     *filters.RequestFilter
 		PathProbabilities *filters.PathProbabilities
 	}
+	// onlineTraining improves PathProbabilities by randomising the
+	// PathProbabilities for a candidate group selected from users being dimmed.
 	onlineTraining struct {
-		IsEnabled bool
-		responsetimecollector.Collector
-		ResponseTimeCollector responsetimecollector.Collector
+		IsEnabled                   bool
+		controlGroupResponseTimes   responsetimecollector.Collector
+		candidateGroupResponseTimes responsetimecollector.Collector
 	}
 	// offlineTraining represents the offline training mode. When this mode is
 	// enabled, all paths under RequestFilter will be dimmed according to
