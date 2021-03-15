@@ -2,6 +2,7 @@ package serving
 
 import (
 	"errors"
+	"fmt"
 	"github.com/kcz17/dimmer/filters"
 	"github.com/kcz17/dimmer/logging"
 	"github.com/kcz17/dimmer/monitoring/responsetime"
@@ -45,10 +46,9 @@ type Server struct {
 		IsEnabled bool
 		// ControlLoop reads the response time of the server and adjusts the
 		// dimming percentage at regular intervals.
-		ControlLoop                       *ServerControlLoop
-		RequestFilter                     *filters.RequestFilter
-		PathProbabilities                 *filters.PathProbabilities
-		ResponseTimeCollectorExcludesHTML bool
+		ControlLoop       *ServerControlLoop
+		RequestFilter     *filters.RequestFilter
+		PathProbabilities *filters.PathProbabilities
 	}
 	// offlineTraining represents the offline training mode. When this mode is
 	// enabled, all paths under RequestFilter will be dimmed according to
@@ -80,17 +80,15 @@ func NewServer(options *ServerOptions) *Server {
 			proxy:        nil,
 		},
 		dimming: struct {
-			IsEnabled                         bool
-			ControlLoop                       *ServerControlLoop
-			RequestFilter                     *filters.RequestFilter
-			PathProbabilities                 *filters.PathProbabilities
-			ResponseTimeCollectorExcludesHTML bool
+			IsEnabled         bool
+			ControlLoop       *ServerControlLoop
+			RequestFilter     *filters.RequestFilter
+			PathProbabilities *filters.PathProbabilities
 		}{
-			ControlLoop:                       options.ControlLoop,
-			RequestFilter:                     options.RequestFilter,
-			PathProbabilities:                 options.PathProbabilities,
-			IsEnabled:                         options.IsDimmingEnabled,
-			ResponseTimeCollectorExcludesHTML: options.ResponseTimeCollectorExcludesHTML,
+			ControlLoop:       options.ControlLoop,
+			RequestFilter:     options.RequestFilter,
+			PathProbabilities: options.PathProbabilities,
+			IsEnabled:         options.IsDimmingEnabled,
 		},
 		offlineTraining: struct {
 			IsEnabled             bool
@@ -114,7 +112,9 @@ func (s *Server) Start() error {
 		CloseOnShutdown: true,
 	}
 
-	s.dimming.ControlLoop.mustStart()
+	if err := s.dimming.ControlLoop.Start(); err != nil {
+		return fmt.Errorf("Server.Start() got err when calling ControlLoop.Start(): %w", err)
+	}
 	go func() {
 		if err := s.proxying.server.ListenAndServe(s.proxying.FrontendAddr); err != nil {
 			log.Fatalf("fasthttp: server error: %v", err)
@@ -131,8 +131,12 @@ func (s *Server) StartOfflineTrainingMode() error {
 	}
 
 	s.offlineTraining.ResponseTimeCollector.Reset()
-	s.dimming.ControlLoop.mustStop()
-	s.dimming.ControlLoop.mustStart()
+	if err := s.dimming.ControlLoop.Stop(); err != nil {
+		return fmt.Errorf("Server.StartOfflineTrainingMode() got err when calling ControlLoop.Stop(): %w", err)
+	}
+	if err := s.dimming.ControlLoop.Start(); err != nil {
+		return fmt.Errorf("Server.StartOfflineTrainingMode() got err when calling ControlLoop.Start(): %w", err)
+	}
 
 	s.offlineTraining.IsEnabled = true
 	return nil
@@ -144,8 +148,12 @@ func (s *Server) StopOfflineTrainingMode() error {
 	}
 
 	s.offlineTraining.ResponseTimeCollector.Reset()
-	s.dimming.ControlLoop.mustStop()
-	s.dimming.ControlLoop.mustStart()
+	if err := s.dimming.ControlLoop.Stop(); err != nil {
+		return fmt.Errorf("Server.StopOfflineTrainingMode() got err when calling ControlLoop.Stop(): %w", err)
+	}
+	if err := s.dimming.ControlLoop.Start(); err != nil {
+		return fmt.Errorf("Server.StopOfflineTrainingMode() got err when calling ControlLoop.Start(): %w", err)
+	}
 
 	s.offlineTraining.IsEnabled = false
 	return nil
@@ -182,11 +190,11 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 		}
 		duration := time.Now().Sub(startTime)
 
-		// Persist the request time, excluding static .html files if the option
-		// for exclusion is enabled. This happens regardless of whether dimming
-		// is actually enabled, so we still get visibility into what the dimmer
-		// would otherwise do.
-		if !s.dimming.ResponseTimeCollectorExcludesHTML || !strings.Contains(string(ctx.Path()), ".html") {
+		// Send the request time to the dimming control loop regardless of
+		// whether dimming is actually enabled, so monitoring tools can capture
+		// what the dimmer would do if enabled. Static .html files are excluded
+		// from the control loop as these cache-able files cause bias.
+		if !strings.Contains(string(ctx.Path()), ".html") {
 			s.dimming.ControlLoop.addResponseTime(duration)
 			if s.offlineTraining.IsEnabled {
 				s.offlineTraining.ResponseTimeCollector.Add(duration)

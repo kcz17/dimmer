@@ -60,9 +60,9 @@ func NewServerControlLoop(
 	return c, nil
 }
 
-func (c *ServerControlLoop) mustStart() {
+func (c *ServerControlLoop) Start() error {
 	if c.loopStarted {
-		panic("control loop already started")
+		return errors.New("ServerControlLoop.Start() failed: control loop already started")
 	}
 
 	c.loopStop = make(chan bool, 1)
@@ -71,11 +71,12 @@ func (c *ServerControlLoop) mustStart() {
 	go c.controlLoop()
 
 	c.loopStarted = true
+	return nil
 }
 
-func (c *ServerControlLoop) mustStop() {
+func (c *ServerControlLoop) Stop() error {
 	if !c.loopStarted {
-		panic("control loop not yet started")
+		return errors.New("ServerControlLoop.Stop() failed: control loop not running")
 	}
 
 	// Reset the control loop, response time collector and PID controller
@@ -90,6 +91,7 @@ func (c *ServerControlLoop) mustStop() {
 	c.dimmingPercentageMux.Unlock()
 
 	c.loopStarted = false
+	return nil
 }
 
 // readDimmingPercentage retrieves the output of the PID controller as a value

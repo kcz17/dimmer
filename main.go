@@ -52,11 +52,6 @@ type Config struct {
 	// to aggregate response time metrics. It should be smaller than or equal to
 	// the number of expected requests received during the sample period.
 	ResponseTimeCollectorRequestsWindow int `env:"RESPONSE_TIME_COLLECTOR_NUM_REQUESTS_WINDOW"`
-
-	// ResponseTimeCollectorExcludesHTML excludes response time capturing for
-	// .html files. Used to ensure that response time calculations are not
-	// biased by the low response times of static files.
-	ResponseTimeCollectorExcludesHTML bool `env:"RESPONSE_TIME_COLLECTOR_EXCLUDES_HTML" env-default:"false"`
 }
 
 func main() {
@@ -81,15 +76,14 @@ func main() {
 
 	// Serve the reverse proxy with dimming control loop.
 	server := serving.NewServer(&serving.ServerOptions{
-		FrontendAddr:                      fmt.Sprintf(":%v", config.FrontEndPort),
-		BackendAddr:                       config.BackEndHost + ":" + config.BackEndPort,
-		MaxConns:                          2048,
-		ControlLoop:                       controlLoop,
-		RequestFilter:                     requestFilter,
-		PathProbabilities:                 pathProbabilities,
-		Logger:                            logger,
-		IsDimmingEnabled:                  config.IsDimmerEnabled,
-		ResponseTimeCollectorExcludesHTML: config.ResponseTimeCollectorExcludesHTML,
+		FrontendAddr:      fmt.Sprintf(":%v", config.FrontEndPort),
+		BackendAddr:       config.BackEndHost + ":" + config.BackEndPort,
+		MaxConns:          2048,
+		ControlLoop:       controlLoop,
+		RequestFilter:     requestFilter,
+		PathProbabilities: pathProbabilities,
+		Logger:            logger,
+		IsDimmingEnabled:  config.IsDimmerEnabled,
 	})
 	if err := server.Start(); err != nil {
 		panic(fmt.Sprintf("expected server.Start() returns nil err; got err = %v", err))
