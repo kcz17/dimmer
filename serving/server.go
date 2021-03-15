@@ -15,15 +15,14 @@ import (
 )
 
 type ServerOptions struct {
-	FrontendAddr                      string
-	BackendAddr                       string
-	MaxConns                          int
-	ControlLoop                       *ServerControlLoop
-	RequestFilter                     *filters.RequestFilter
-	PathProbabilities                 *filters.PathProbabilities
-	Logger                            logging.Logger
-	IsDimmingEnabled                  bool
-	ResponseTimeCollectorExcludesHTML bool
+	FrontendAddr      string
+	BackendAddr       string
+	MaxConns          int
+	ControlLoop       *ServerControlLoop
+	RequestFilter     *filters.RequestFilter
+	PathProbabilities *filters.PathProbabilities
+	Logger            logging.Logger
+	IsDimmingEnabled  bool
 }
 
 // Server is a dimming-enhanced server. Dimming is actuated using a control
