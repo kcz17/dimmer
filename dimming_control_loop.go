@@ -17,22 +17,39 @@ const (
 	P95 = "p95"
 )
 
+// ServerControlLoop handles the interval-based dimming percentage calculation.
+// The control loop is interval-based as recalculating the dimming percentage
+// based on an aggregate percentile response time would be computationally
+// expensive.
 type ServerControlLoop struct {
+	logger logging.Logger
+
+	// pid is a naive PID controller which outputs a percentage given response
+	// time input.
 	pid *pidcontroller.PIDController
-	// responseTimeCollector calculates the input to the PID controller.
+
+	// responseTimeCollector aggregates response times, allowing for calculation
+	// of a percentile response time.
 	responseTimeCollector responsetimecollector.Collector
 	// responseTimePercentile is the response time percentile the dimmer will
 	// pass to the PID controller as input.
 	responseTimePercentile string
-	logger                 logging.Logger
+
 	// dimmingPercentage is the output of the PID controller, protected from
 	// race conditions by dimmingPercentageMux.
 	dimmingPercentage    float64
 	dimmingPercentageMux *sync.RWMutex
-	// loopWG allows the spawned goroutine to be gracefully stopped.
+
+	// loopStarted is used so the control loop can be started and stopped.
+	// Stopping the control loop is needed when resetting the controller as
+	// a stale dimming percentage can be written if the response time collector
+	// is reset after a percentile is retrieved and before the resulting dimming
+	// percentage is written.
 	loopStarted bool
-	loopWG      *sync.WaitGroup
-	loopStop    chan bool
+	// As controlLoop runs in a goroutine, loopWaiter and loopStop allow the
+	// spawned goroutine to be gracefully stopped.
+	loopWaiter *sync.WaitGroup
+	loopStop   chan bool
 }
 
 // NewServerControlLoop initialises the control loop.
@@ -66,15 +83,15 @@ func (c *ServerControlLoop) Start() error {
 	}
 
 	c.loopStop = make(chan bool, 1)
-	c.loopWG = &sync.WaitGroup{}
-	c.loopWG.Add(1)
+	c.loopWaiter = &sync.WaitGroup{}
+	c.loopWaiter.Add(1)
 	go c.controlLoop()
 
 	c.loopStarted = true
 	return nil
 }
 
-func (c *ServerControlLoop) Stop() error {
+func (c *ServerControlLoop) Reset() error {
 	if !c.loopStarted {
 		return errors.New("ServerControlLoop.Stop() failed: control loop not running")
 	}
@@ -82,7 +99,7 @@ func (c *ServerControlLoop) Stop() error {
 	// Reset the control loop, response time collector and PID controller
 	// in this order to ensure stale data is not written between each reset.
 	close(c.loopStop)
-	c.loopWG.Wait()
+	c.loopWaiter.Wait()
 	c.responseTimeCollector.Reset()
 	c.pid.Reset()
 
@@ -90,7 +107,12 @@ func (c *ServerControlLoop) Stop() error {
 	c.dimmingPercentage = 0.0
 	c.dimmingPercentageMux.Unlock()
 
-	c.loopStarted = false
+	// Start a new control loop.
+	c.loopStop = make(chan bool, 1)
+	c.loopWaiter = &sync.WaitGroup{}
+	c.loopWaiter.Add(1)
+	go c.controlLoop()
+
 	return nil
 }
 
@@ -113,7 +135,11 @@ func (c *ServerControlLoop) addResponseTime(t time.Duration) {
 func (c *ServerControlLoop) controlLoop() {
 	ticker := time.NewTicker(time.Second * 1)
 	defer ticker.Stop()
-	defer c.loopWG.Done()
+	defer c.loopWaiter.Done()
+
+	// This for-select pattern allows the control loop to run at the ticker
+	// interval, while also listening for the loopStop channel to indicate
+	// that the control loop should stop.
 	for {
 		select {
 		case <-ticker.C:

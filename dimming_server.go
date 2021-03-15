@@ -49,6 +49,11 @@ type Server struct {
 		RequestFilter     *filters.RequestFilter
 		PathProbabilities *filters.PathProbabilities
 	}
+	onlineTraining struct {
+		IsEnabled bool
+		responsetimecollector.Collector
+		ResponseTimeCollector responsetimecollector.Collector
+	}
 	// offlineTraining represents the offline training mode. When this mode is
 	// enabled, all paths under RequestFilter will be dimmed according to
 	// PathProbabilities, regardless of the ControlLoop output.
@@ -138,11 +143,8 @@ func (s *Server) StartOfflineTrainingMode() error {
 	}
 
 	s.offlineTraining.ResponseTimeCollector.Reset()
-	if err := s.dimming.ControlLoop.Stop(); err != nil {
-		return fmt.Errorf("Server.StartOfflineTrainingMode() got err when calling ControlLoop.Stop(): %w", err)
-	}
-	if err := s.dimming.ControlLoop.Start(); err != nil {
-		return fmt.Errorf("Server.StartOfflineTrainingMode() got err when calling ControlLoop.ListenAndServe(): %w", err)
+	if err := s.dimming.ControlLoop.Reset(); err != nil {
+		return fmt.Errorf("Server.StartOfflineTrainingMode() got err when calling ControlLoop.Reset(): %w", err)
 	}
 
 	s.offlineTraining.IsEnabled = true
@@ -158,11 +160,8 @@ func (s *Server) StopOfflineTrainingMode() error {
 	}
 
 	s.offlineTraining.ResponseTimeCollector.Reset()
-	if err := s.dimming.ControlLoop.Stop(); err != nil {
-		return fmt.Errorf("Server.StopOfflineTrainingMode() got err when calling ControlLoop.Stop(): %w", err)
-	}
-	if err := s.dimming.ControlLoop.Start(); err != nil {
-		return fmt.Errorf("Server.StopOfflineTrainingMode() got err when calling ControlLoop.ListenAndServe(): %w", err)
+	if err := s.dimming.ControlLoop.Reset(); err != nil {
+		return fmt.Errorf("Server.StopOfflineTrainingMode() got err when calling ControlLoop.Reset(): %w", err)
 	}
 
 	s.offlineTraining.IsEnabled = false
