@@ -5,9 +5,8 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/kcz17/dimmer/filters"
 	"github.com/kcz17/dimmer/logging"
-	"github.com/kcz17/dimmer/monitoring/responsetime"
 	"github.com/kcz17/dimmer/pidcontroller"
-	serving "github.com/kcz17/dimmer/serving"
+	"github.com/kcz17/dimmer/responsetimecollector"
 	"log"
 )
 
@@ -67,7 +66,7 @@ func main() {
 	controlLoop := initControlLoop(
 		&config,
 		initPIDController(&config),
-		responsetime.NewTachymeterCollector(config.ResponseTimeCollectorRequestsWindow),
+		responsetimecollector.NewTachymeterCollector(config.ResponseTimeCollectorRequestsWindow),
 		logger,
 	)
 
@@ -76,7 +75,7 @@ func main() {
 	pathProbabilities := initPathProbabilities()
 
 	// Serve the reverse proxy with dimming control loop.
-	server := serving.NewServer(&serving.ServerOptions{
+	server := NewServer(&ServerOptions{
 		FrontendAddr:      fmt.Sprintf(":%v", config.FrontEndPort),
 		BackendAddr:       config.BackEndHost + ":" + config.BackEndPort,
 		MaxConns:          2048,
@@ -90,7 +89,7 @@ func main() {
 		panic(fmt.Sprintf("expected server.Start() returns nil err; got err = %v", err))
 	}
 
-	api := serving.OfflineTrainingAPIServer{Server: server}
+	api := OfflineTrainingAPIServer{Server: server}
 	if err := api.ListenAndServe(":8079"); err != nil {
 		panic(fmt.Errorf("expected api.ListenAndServe() returns nil err; got err = %w", err))
 	}
@@ -160,14 +159,14 @@ func initPIDController(config *Config) *pidcontroller.PIDController {
 func initControlLoop(
 	config *Config,
 	pid *pidcontroller.PIDController,
-	responseTimeCollector responsetime.Collector,
+	responseTimeCollector responsetimecollector.Collector,
 	logger logging.Logger,
-) *serving.ServerControlLoop {
+) *ServerControlLoop {
 	if config.ControllerPercentile != "p50" && config.ControllerPercentile != "p75" && config.ControllerPercentile != "p95" {
 		log.Fatalf("expected environment variable CONTROLLER_PERCENTILE to be one of {p50|p75|p95}; got %s", config.ControllerPercentile)
 	}
 
-	c, err := serving.NewServerControlLoop(pid, responseTimeCollector, config.ControllerPercentile, logger)
+	c, err := NewServerControlLoop(pid, responseTimeCollector, config.ControllerPercentile, logger)
 	if err != nil {
 		log.Fatalf("expected NewServerControlLoop() returns nil err; got err = %v", err)
 	}

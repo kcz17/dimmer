@@ -1,4 +1,4 @@
-package responsetime
+package responsetimecollector
 
 import "time"
 

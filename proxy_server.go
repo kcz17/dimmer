@@ -1,11 +1,11 @@
-package serving
+package main
 
 import (
 	"errors"
 	"fmt"
 	"github.com/kcz17/dimmer/filters"
 	"github.com/kcz17/dimmer/logging"
-	"github.com/kcz17/dimmer/monitoring/responsetime"
+	"github.com/kcz17/dimmer/responsetimecollector"
 	"github.com/valyala/fasthttp"
 	"log"
 	"math/rand"
@@ -56,7 +56,7 @@ type Server struct {
 		IsEnabled bool
 		// ResponseTimeCollector allows external clients to monitor the response
 		// time. The collector is disabled by default.
-		ResponseTimeCollector responsetime.Collector
+		ResponseTimeCollector responsetimecollector.Collector
 	}
 	// isStarted is checked to ensure each Server is only ever started once.
 	isStarted bool
@@ -91,10 +91,10 @@ func NewServer(options *ServerOptions) *Server {
 		},
 		offlineTraining: struct {
 			IsEnabled             bool
-			ResponseTimeCollector responsetime.Collector
+			ResponseTimeCollector responsetimecollector.Collector
 		}{
 			IsEnabled:             false,
-			ResponseTimeCollector: responsetime.NewArrayCollector(),
+			ResponseTimeCollector: responsetimecollector.NewArrayCollector(),
 		},
 		isStarted: false,
 	}

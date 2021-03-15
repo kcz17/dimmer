@@ -1,11 +1,11 @@
-package serving
+package main
 
 import (
 	"errors"
 	"fmt"
 	"github.com/kcz17/dimmer/logging"
-	"github.com/kcz17/dimmer/monitoring/responsetime"
 	"github.com/kcz17/dimmer/pidcontroller"
+	"github.com/kcz17/dimmer/responsetimecollector"
 	"sync"
 	"time"
 )
@@ -20,7 +20,7 @@ const (
 type ServerControlLoop struct {
 	pid *pidcontroller.PIDController
 	// responseTimeCollector calculates the input to the PID controller.
-	responseTimeCollector responsetime.Collector
+	responseTimeCollector responsetimecollector.Collector
 	// responseTimePercentile is the response time percentile the dimmer will
 	// pass to the PID controller as input.
 	responseTimePercentile string
@@ -38,7 +38,7 @@ type ServerControlLoop struct {
 // NewServerControlLoop initialises the control loop.
 func NewServerControlLoop(
 	pid *pidcontroller.PIDController,
-	responseTimeCollector responsetime.Collector,
+	responseTimeCollector responsetimecollector.Collector,
 	responseTimePercentile string,
 	logger logging.Logger,
 ) (*ServerControlLoop, error) {
