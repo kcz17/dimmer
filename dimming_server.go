@@ -15,19 +15,20 @@ import (
 )
 
 type ServerOptions struct {
+	Logger            logging.Logger
 	FrontendAddr      string
 	BackendAddr       string
 	MaxConns          int
 	ControlLoop       *ServerControlLoop
 	RequestFilter     *filters.RequestFilter
 	PathProbabilities *filters.PathProbabilities
-	Logger            logging.Logger
 	IsDimmingEnabled  bool
 }
 
 // Server is a dimming-enhanced server. Dimming is actuated using a control
-// loop in s.requestHandler, which uses allows dimming on select paths, with
-// each path associated with a probability it will be dimmed.
+// loop in requestHandler(), which uses conditionally performs dimming on
+// requests specified by the RequestFilter and path-dependent probabilities
+// specified by PathProbabilities.
 type Server struct {
 	logger   logging.Logger
 	proxying struct {
