@@ -32,17 +32,18 @@ type Config struct {
 	// General dimming.
 	///////////////////////////////////////////////////////////////////////////
 
-	IsDimmerEnabled        bool    `env:"DIMMER_ENABLED" env-default:"true"`
+	IsDimmerEnabled bool `env:"DIMMER_ENABLED" env-default:"true"`
+
+	///////////////////////////////////////////////////////////////////////////
+	// Dimming PID controller.
+	///////////////////////////////////////////////////////////////////////////
+
 	ControllerSamplePeriod float64 `env:"CONTROLLER_SAMPLE_PERIOD"`
 	ControllerPercentile   string  `env:"CONTROLLER_PERCENTILE" env-default:"p95"`
 	ControllerSetpoint     float64 `env:"CONTROLLER_SETPOINT"`
 	ControllerKp           float64 `env:"CONTROLLER_KP"`
 	ControllerKi           float64 `env:"CONTROLLER_KI"`
 	ControllerKd           float64 `env:"CONTROLLER_KD"`
-
-	///////////////////////////////////////////////////////////////////////////
-	// Dimming controller.
-	///////////////////////////////////////////////////////////////////////////
 
 	///////////////////////////////////////////////////////////////////////////
 	// Response time data collection.
