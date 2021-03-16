@@ -3,6 +3,7 @@ package filters
 import (
 	"errors"
 	"fmt"
+	"math/rand"
 	"sync"
 )
 
@@ -80,4 +81,22 @@ func (p *PathProbabilities) Clear() {
 	p.probabilitiesMux.Lock()
 	p.probabilities = map[string]float64{}
 	p.probabilitiesMux.Unlock()
+}
+
+func (p *PathProbabilities) Copy() *PathProbabilities {
+	// Copy across the map contents instead of copying its reference
+	probabilities := make(map[string]float64)
+	for key, value := range p.probabilities {
+		probabilities[key] = value
+	}
+
+	return &PathProbabilities{
+		probabilities:    probabilities,
+		probabilitiesMux: &sync.RWMutex{},
+		defaultValue:     p.defaultValue,
+	}
+}
+
+func (p *PathProbabilities) SampleShouldDim(path string) bool {
+	return rand.Float64() < p.Get(path)
 }
