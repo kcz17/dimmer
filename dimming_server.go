@@ -212,8 +212,8 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 			}
 		}
 
-		// Remove connection header per RFC2616.
 		func(req *fasthttp.Request) {
+			// Remove connection header per RFC2616.
 			req.Header.Del("Connection")
 		}(req)
 
@@ -245,8 +245,8 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 			}
 		}
 
-		// Remove connection header per RFC2616.
 		func(resp *fasthttp.Response) {
+			// Remove connection header per RFC2616.
 			resp.Header.Del("Connection")
 
 			// Only set an online training cookie for .html pages. If this
