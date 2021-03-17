@@ -1,6 +1,7 @@
 package onlinetraining
 
 import (
+	"fmt"
 	"github.com/kcz17/dimmer/filters"
 	"github.com/kcz17/dimmer/responsetimecollector"
 	"github.com/valyala/fasthttp"
@@ -18,7 +19,9 @@ type OnlineTraining struct {
 	isEnabled                   bool
 	controlGroupResponseTimes   responsetimecollector.Collector
 	candidateGroupResponseTimes responsetimecollector.Collector
+	controlPathProbabilities    *filters.PathProbabilities
 	candidatePathProbabilities  *filters.PathProbabilities
+	probabilitySampler          *ProbabilitySampler
 }
 
 func NewOnlineTraining(pathProbabilities *filters.PathProbabilities) *OnlineTraining {
@@ -26,7 +29,9 @@ func NewOnlineTraining(pathProbabilities *filters.PathProbabilities) *OnlineTrai
 		isEnabled:                   false,
 		controlGroupResponseTimes:   responsetimecollector.NewTachymeterCollector(100),
 		candidateGroupResponseTimes: responsetimecollector.NewTachymeterCollector(100),
-		candidatePathProbabilities:  pathProbabilities,
+		controlPathProbabilities:    pathProbabilities.Copy(),
+		candidatePathProbabilities:  pathProbabilities.Copy(),
+		probabilitySampler:          NewProbabilitySampler(),
 	}
 }
 
@@ -44,6 +49,38 @@ func (t *OnlineTraining) AddCandidateResponseTime(duration time.Duration) {
 
 func (t *OnlineTraining) AddControlResponseTime(duration time.Duration) {
 	t.controlGroupResponseTimes.Add(duration)
+}
+
+func (t *OnlineTraining) SampleAndSetCandidatePathProbabilities() error {
+	// Sample a set of probabilities for use in rules. Order does not matter
+	// as sampled probabilities are independent of paths.
+	probabilities := t.probabilitySampler.Sample(t.candidatePathProbabilities.NumPaths())
+	var rules []filters.PathProbabilityRule
+	for i, path := range t.candidatePathProbabilities.GetPaths() {
+		rules = append(rules, filters.PathProbabilityRule{
+			Path:        path,
+			Probability: probabilities[i],
+		})
+	}
+
+	t.candidatePathProbabilities.Clear()
+	if err := t.candidatePathProbabilities.SetAll(rules); err != nil {
+		return fmt.Errorf("expected t.candidatePathProbabilities.SetAll(rules = %+v) returns nil err; got err = %w", rules, err)
+	}
+
+	return nil
+}
+
+func (t *OnlineTraining) CheckCandidateImprovesResponseTimes() bool {
+	candidateAggregate := t.candidateGroupResponseTimes.Aggregate()
+	controlAggregate := t.controlGroupResponseTimes.Aggregate()
+
+	candidateP95 := float64(candidateAggregate.P95) / float64(time.Second)
+	controlP95 := float64(controlAggregate.P95) / float64(time.Second)
+
+	// Use the heuristic that the candidate probabilities must decrease the
+	// control 95th percentile by at least 5% of the control 95th percentile.
+	return candidateP95 <= (controlP95 - controlP95*0.05)
 }
 
 func RequestHasCookie(request *fasthttp.Request) bool {

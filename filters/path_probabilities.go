@@ -50,7 +50,27 @@ func NewPathProbabilities(defaultValue float64) (*PathProbabilities, error) {
 }
 
 func (p *PathProbabilities) List() map[string]float64 {
+	p.probabilitiesMux.RLock()
+	defer p.probabilitiesMux.RUnlock()
 	return p.probabilities
+}
+
+func (p *PathProbabilities) NumPaths() int {
+	p.probabilitiesMux.RLock()
+	defer p.probabilitiesMux.RUnlock()
+	return len(p.paths)
+}
+
+func (p *PathProbabilities) GetPaths() []string {
+	p.probabilitiesMux.RLock()
+	defer p.probabilitiesMux.RUnlock()
+
+	var paths []string
+	for k := range p.paths {
+		paths = append(paths, k)
+	}
+
+	return paths
 }
 
 func (p *PathProbabilities) Get(path string) float64 {
