@@ -17,6 +17,9 @@ type APIServer struct {
 func (s *APIServer) ListenAndServe(addr string) error {
 	router := routing.New()
 
+	router.Post("/training/online", s.startOfflineTrainingModeHandler())
+	router.Delete("/training/online", s.stopOfflineTrainingModeHandler())
+
 	router.Get("/training/offline/stats", s.getOfflineTrainingStatsHandler())
 	router.Post("/training/offline", s.startOfflineTrainingModeHandler())
 	router.Delete("/training/offline", s.stopOfflineTrainingModeHandler())
@@ -26,6 +29,34 @@ func (s *APIServer) ListenAndServe(addr string) error {
 	router.Delete("/probabilities", s.clearPathProbabilitiesHandler())
 
 	return fasthttp.ListenAndServe(addr, router.HandleRequest)
+}
+
+func (s *APIServer) startOnlineTrainingModeHandler() routing.Handler {
+	return func(c *routing.Context) error {
+		if s.Server.dimmingMode == OfflineTraining {
+			return errors.New("cannot start online training if offline training turned on")
+		}
+
+		if err := s.Server.SetDimmingMode(DimmingWithOnlineTraining); err != nil {
+			return fmt.Errorf("could not start online training mode: err = %w\n", err)
+		}
+
+		return c.Write("offline training mode started\n")
+	}
+}
+
+func (s *APIServer) stopOnlineTrainingModeHandler() routing.Handler {
+	return func(c *routing.Context) error {
+		if s.Server.dimmingMode == OfflineTraining {
+			return errors.New("cannot stop online training if offline training turned on")
+		}
+
+		if err := s.Server.SetDimmingMode(s.Server.defaultDimmingMode); err != nil {
+			return fmt.Errorf("could not stop offline training mode: err = %w\n", err)
+		}
+
+		return c.Write("offline training mode stopped\n")
+	}
 }
 
 func (s *APIServer) getOfflineTrainingStatsHandler() routing.Handler {
