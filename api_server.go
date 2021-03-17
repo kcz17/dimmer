@@ -60,7 +60,7 @@ func (s *OfflineTrainingAPIServer) startTrainingModeHandler() routing.Handler {
 
 func (s *OfflineTrainingAPIServer) stopTrainingModeHandler() routing.Handler {
 	return func(c *routing.Context) error {
-		if err := s.Server.SetDimmingMode(s.Server.DefaultDimmingMode()); err != nil {
+		if err := s.Server.SetDimmingMode(s.Server.defaultDimmingMode); err != nil {
 			return fmt.Errorf("could not stop offline training mode: err = %w\n", err)
 		}
 

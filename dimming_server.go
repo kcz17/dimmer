@@ -156,10 +156,6 @@ func (s *Server) UpdatePathProbabilities(rules []filters.PathProbabilityRule) er
 	return nil
 }
 
-func (s *Server) DefaultDimmingMode() DimmingMode {
-	return s.defaultDimmingMode
-}
-
 func (s *Server) SetDimmingMode(mode DimmingMode) error {
 	s.externalOperationsLock.Lock()
 	defer s.externalOperationsLock.Unlock()
