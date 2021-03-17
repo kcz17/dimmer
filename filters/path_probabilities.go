@@ -7,9 +7,19 @@ import (
 	"sync"
 )
 
+// PathProbabilities stores per-path probabilities which affect how each path
+// is dimmed.
+//
+// A key invariant is that Get operations must be insensitive of a path's
+// leading slash. To keep Get lookup O(1), Set is responsible for O(n) string
+// operations which add both leading slash inclusive and exclusive paths to the
+// map, enabling O(1) Get lookup.
 type PathProbabilities struct {
+	// paths is a list of unique paths within the map, strictly inclusive of
+	// their leading slash.
+	paths map[string]bool
 	// probabilities is a map from a path to a probability. Paths must be
-	// inserted with and without their trailing slash to allow the trailing-
+	// inserted with and without their leading slash to allow the leading-
 	// slash-insensitive Get operation to work without string manipulation.
 	probabilities map[string]float64
 	// probabilitiesMux guards probabilities from concurrent reads and writes,
@@ -32,6 +42,7 @@ func NewPathProbabilities(defaultValue float64) (*PathProbabilities, error) {
 	}
 
 	return &PathProbabilities{
+		paths:            map[string]bool{},
 		probabilities:    map[string]float64{},
 		probabilitiesMux: &sync.RWMutex{},
 		defaultValue:     defaultValue,
@@ -58,9 +69,10 @@ func (p *PathProbabilities) Set(rule PathProbabilityRule) error {
 		return errors.New(fmt.Sprintf("PathProbabilities.Set() with path %s expected probability between 0 and 1; got probability = %v", rule.Path, rule.Probability))
 	}
 
-	// Ensure rules exist for the path both with and without a trailing slash.
+	// Ensure rules exist for the path both with and without a leading slash.
 	path := prependLeadingSlashIfMissing(rule.Path)
 	p.probabilitiesMux.Lock()
+	p.paths[path] = true
 	p.probabilities[path] = rule.Probability
 	p.probabilities[path[1:]] = rule.Probability
 	p.probabilitiesMux.Unlock()
@@ -79,18 +91,25 @@ func (p *PathProbabilities) SetAll(rules []PathProbabilityRule) error {
 
 func (p *PathProbabilities) Clear() {
 	p.probabilitiesMux.Lock()
+	p.paths = map[string]bool{}
 	p.probabilities = map[string]float64{}
 	p.probabilitiesMux.Unlock()
 }
 
 func (p *PathProbabilities) Copy() *PathProbabilities {
-	// Copy across the map contents instead of copying its reference
+	// Copy across map contents instead of copying their references.
+	paths := make(map[string]bool)
+	for key, value := range p.paths {
+		paths[key] = value
+	}
+
 	probabilities := make(map[string]float64)
 	for key, value := range p.probabilities {
 		probabilities[key] = value
 	}
 
 	return &PathProbabilities{
+		paths:            paths,
 		probabilities:    probabilities,
 		probabilitiesMux: &sync.RWMutex{},
 		defaultValue:     p.defaultValue,
