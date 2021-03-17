@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/kcz17/dimmer/filters"
 	"github.com/kcz17/dimmer/logging"
+	"github.com/kcz17/dimmer/onlinetraining"
 	"github.com/kcz17/dimmer/responsetimecollector"
 	"github.com/valyala/fasthttp"
 	"math/rand"
@@ -52,12 +53,7 @@ type Server struct {
 	}
 	// onlineTraining improves PathProbabilities by randomising the
 	// PathProbabilities for a candidate group selected from users being dimmed.
-	onlineTraining struct {
-		IsEnabled                   bool
-		ControlGroupResponseTimes   responsetimecollector.Collector
-		CandidateGroupResponseTimes responsetimecollector.Collector
-		CandidatePathProbabilities  *filters.PathProbabilities
-	}
+	onlineTraining *onlinetraining.OnlineTraining
 	// offlineTraining represents the offline training mode. When this mode is
 	// enabled, all paths under RequestFilter will be dimmed according to
 	// PathProbabilities, regardless of the ControlLoop output.
@@ -100,17 +96,7 @@ func NewServer(options *ServerOptions) *Server {
 			PathProbabilities: options.PathProbabilities,
 			IsEnabled:         options.IsDimmingEnabled,
 		},
-		onlineTraining: struct {
-			IsEnabled                   bool
-			ControlGroupResponseTimes   responsetimecollector.Collector
-			CandidateGroupResponseTimes responsetimecollector.Collector
-			CandidatePathProbabilities  *filters.PathProbabilities
-		}{
-			IsEnabled:                   false,
-			ControlGroupResponseTimes:   responsetimecollector.NewTachymeterCollector(100),
-			CandidateGroupResponseTimes: responsetimecollector.NewTachymeterCollector(100),
-			CandidatePathProbabilities:  options.PathProbabilities.Copy(),
-		},
+		onlineTraining: onlinetraining.NewOnlineTraining(options.PathProbabilities.Copy()),
 		offlineTraining: struct {
 			IsEnabled             bool
 			ResponseTimeCollector responsetimecollector.Collector
@@ -202,10 +188,10 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 			// Ensure dimming is weighted according to path probabilities. Path
 			// probabilities are chosen according to whether the request is an
 			// online training candidate or not.
-			shouldUseOnlineTrainingProbabilities := s.onlineTraining.IsEnabled &&
-				hasOnlineTrainingCandidateCookie(req)
+			shouldUseOnlineTrainingProbabilities := s.onlineTraining.IsEnabled() &&
+				onlinetraining.RequestHasCandidateCookie(req)
 			if shouldUseOnlineTrainingProbabilities {
-				shouldDim = shouldDim && s.onlineTraining.CandidatePathProbabilities.SampleShouldDim(string(ctx.Path()))
+				shouldDim = shouldDim && s.onlineTraining.SampleCandidateGroupShouldDim(string(ctx.Path()))
 			} else {
 				shouldDim = shouldDim && s.dimming.PathProbabilities.SampleShouldDim(string(ctx.Path()))
 			}
@@ -239,11 +225,11 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 				s.offlineTraining.ResponseTimeCollector.Add(duration)
 			}
 
-			if s.onlineTraining.IsEnabled && hasOnlineTrainingCookie(req) {
-				if hasOnlineTrainingCandidateCookie(req) {
-					s.onlineTraining.CandidateGroupResponseTimes.Add(duration)
+			if s.onlineTraining.IsEnabled() && onlinetraining.RequestHasCookie(req) {
+				if onlinetraining.RequestHasCandidateCookie(req) {
+					s.onlineTraining.AddCandidateResponseTime(duration)
 				} else {
-					s.onlineTraining.ControlGroupResponseTimes.Add(duration)
+					s.onlineTraining.AddControlResponseTime(duration)
 				}
 			}
 		}
@@ -256,8 +242,8 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 			// restriction did not exist, a cookie could be sampled several
 			// times for each of the API requests associated with a single
 			// page, despite the user only visiting one page.
-			if s.onlineTraining.IsEnabled && !hasOnlineTrainingCookie(req) {
-				resp.Header.Cookie(sampleOnlineTrainingCookie())
+			if s.onlineTraining.IsEnabled() && !onlinetraining.RequestHasCookie(req) {
+				resp.Header.Cookie(onlinetraining.SampleCookie())
 			}
 		}(resp)
 	}
