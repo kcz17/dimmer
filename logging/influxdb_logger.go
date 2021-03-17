@@ -4,6 +4,7 @@ import (
 	"fmt"
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/influxdata/influxdb-client-go/v2/api"
+	"github.com/kcz17/dimmer/filters"
 	"time"
 )
 
@@ -65,5 +66,14 @@ func (l *influxDBLogger) LogPIDControllerState(p float64, i float64, d float64, 
 		AddField("d", d).
 		AddField("e_t", errorTerm).
 		SetTime(time.Now())
+	l.asyncWriter.WritePoint(point)
+}
+
+func (l *influxDBLogger) LogControlProbabilityChange(probabilities []filters.PathProbabilityRule) {
+	point := influxdb2.NewPointWithMeasurement("dimmer_candidate_probabilities").
+		SetTime(time.Now())
+	for _, probability := range probabilities {
+		point.AddField(probability.Path, probability.Probability)
+	}
 	l.asyncWriter.WritePoint(point)
 }

@@ -2,6 +2,7 @@ package logging
 
 import (
 	"fmt"
+	"github.com/kcz17/dimmer/filters"
 	"time"
 )
 
@@ -27,4 +28,8 @@ func (*stdoutLogger) LogDimmerOutput(pidOutput float64) {
 
 func (*stdoutLogger) LogPIDControllerState(p float64, i float64, d float64, errorTerm float64) {
 	fmt.Printf("[%s] p: %.3f, i: %.3f, d: %.3f, e(t): %.3f\n", time.Now().Format(time.StampMilli), p, i, d, errorTerm)
+}
+
+func (*stdoutLogger) LogControlProbabilityChange(probabilities []filters.PathProbabilityRule) {
+	fmt.Printf("[%s] control probabilities changed: %+v\n", time.Now().Format(time.StampMilli), probabilities)
 }

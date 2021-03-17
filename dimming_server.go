@@ -155,7 +155,7 @@ func (s *Server) UpdatePathProbabilities(rules []filters.PathProbabilityRule) er
 	return nil
 }
 
-func (s *Server) SetDimmingMode(mode DimmingMode) error {
+func (s *Server) SetDimmingMode(newMode DimmingMode) error {
 	s.externalOperationsLock.Lock()
 	defer s.externalOperationsLock.Unlock()
 
@@ -163,12 +163,24 @@ func (s *Server) SetDimmingMode(mode DimmingMode) error {
 		return errors.New("SetDimmingMode() expected server running; server is not running")
 	}
 
-	s.offlineTraining.ResetCollector()
-	if err := s.dimming.ControlLoop.Reset(); err != nil {
-		return fmt.Errorf("expected ControlLoop.ResetCollector() returns nil err; got err = %w", err)
+	if s.dimmingMode == DimmingWithOnlineTraining {
+		if err := s.onlineTraining.StopLoop(); err != nil {
+			return fmt.Errorf("expected onlineTraining.StopLoop() returns nil err; got err = %w", err)
+		}
 	}
 
-	s.dimmingMode = mode
+	s.offlineTraining.ResetCollector()
+	if err := s.dimming.ControlLoop.Reset(); err != nil {
+		return fmt.Errorf("expected ControlLoop.Reset() returns nil err; got err = %w", err)
+	}
+
+	if newMode == DimmingWithOnlineTraining {
+		if err := s.onlineTraining.StartLoop(); err != nil {
+			return fmt.Errorf("expected onlineTraining.StartLoop() returns nil err; got err = %w", err)
+		}
+	}
+
+	s.dimmingMode = newMode
 	return nil
 }
 

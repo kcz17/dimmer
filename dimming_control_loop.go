@@ -79,7 +79,7 @@ func NewServerControlLoop(
 
 func (c *ServerControlLoop) Start() error {
 	if c.loopStarted {
-		return errors.New("ServerControlLoop.ListenAndServe() failed: control loop already started")
+		return errors.New("ServerControlLoop.Start() failed: control loop already started")
 	}
 
 	c.loopStop = make(chan bool, 1)
@@ -172,6 +172,5 @@ func (c *ServerControlLoop) controlLoop() {
 		case <-c.loopStop:
 			return
 		}
-
 	}
 }
