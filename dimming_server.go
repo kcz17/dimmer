@@ -142,7 +142,6 @@ func (s *Server) ListenAndServe() error {
 func (s *Server) UpdatePathProbabilities(rules []filters.PathProbabilityRule) error {
 	// Path probabilities affect both dimming and online training, hence both
 	// must be accurately set.
-
 	if err := s.dimming.PathProbabilities.SetAll(rules); err != nil {
 		return fmt.Errorf("expected PathProbabilities.SetAll(probabilities = %+v) to return err != nil; got err = %w", rules, err)
 	}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/jackwhelpton/fasthttp-routing/v2"
 	"github.com/kcz17/dimmer/filters"
@@ -50,6 +51,10 @@ func (s *OfflineTrainingAPIServer) getTrainingModeStatsHandler() routing.Handler
 
 func (s *OfflineTrainingAPIServer) startTrainingModeHandler() routing.Handler {
 	return func(c *routing.Context) error {
+		if s.Server.dimmingMode == DimmingWithOnlineTraining {
+			return errors.New("cannot start offline training if online training turned on")
+		}
+
 		if err := s.Server.SetDimmingMode(DimmingWithOnlineTraining); err != nil {
 			return fmt.Errorf("could not start offline training mode: err = %w\n", err)
 		}
@@ -60,6 +65,10 @@ func (s *OfflineTrainingAPIServer) startTrainingModeHandler() routing.Handler {
 
 func (s *OfflineTrainingAPIServer) stopTrainingModeHandler() routing.Handler {
 	return func(c *routing.Context) error {
+		if s.Server.dimmingMode == DimmingWithOnlineTraining {
+			return errors.New("cannot stop offline training if online training turned on")
+		}
+
 		if err := s.Server.SetDimmingMode(s.Server.defaultDimmingMode); err != nil {
 			return fmt.Errorf("could not stop offline training mode: err = %w\n", err)
 		}
