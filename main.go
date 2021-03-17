@@ -76,7 +76,12 @@ func main() {
 	requestFilter := initRequestFilter()
 	pathProbabilities := initPathProbabilities()
 
-	onlineTrainingService, err := onlinetraining.NewOnlineTraining(initPaths(), 1)
+	onlineTrainingService, err := onlinetraining.NewOnlineTraining(
+		logger,
+		initPaths(),
+		pathProbabilities,
+		1,
+	)
 	if err != nil {
 		log.Fatalf("expected onlineTrainingService to return nil err; got err = %v", err)
 	}
@@ -103,7 +108,7 @@ func main() {
 		}
 	}()
 
-	api := OfflineTrainingAPIServer{Server: server}
+	api := APIServer{Server: server}
 	if err := api.ListenAndServe(":8079"); err != nil {
 		panic(fmt.Errorf("expected api.ListenAndServe() returns nil err; got err = %w", err))
 	}

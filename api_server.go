@@ -10,11 +10,11 @@ import (
 	"time"
 )
 
-type OfflineTrainingAPIServer struct {
+type APIServer struct {
 	Server *Server
 }
 
-func (s *OfflineTrainingAPIServer) ListenAndServe(addr string) error {
+func (s *APIServer) ListenAndServe(addr string) error {
 	router := routing.New()
 
 	router.Get("/training/stats", s.getTrainingModeStatsHandler())
@@ -28,7 +28,7 @@ func (s *OfflineTrainingAPIServer) ListenAndServe(addr string) error {
 	return fasthttp.ListenAndServe(addr, router.HandleRequest)
 }
 
-func (s *OfflineTrainingAPIServer) getTrainingModeStatsHandler() routing.Handler {
+func (s *APIServer) getTrainingModeStatsHandler() routing.Handler {
 	return func(c *routing.Context) error {
 		aggregation := s.Server.offlineTraining.GetResponseTimeMetrics()
 		response := &struct {
@@ -49,7 +49,7 @@ func (s *OfflineTrainingAPIServer) getTrainingModeStatsHandler() routing.Handler
 	}
 }
 
-func (s *OfflineTrainingAPIServer) startTrainingModeHandler() routing.Handler {
+func (s *APIServer) startTrainingModeHandler() routing.Handler {
 	return func(c *routing.Context) error {
 		if s.Server.dimmingMode == DimmingWithOnlineTraining {
 			return errors.New("cannot start offline training if online training turned on")
@@ -63,7 +63,7 @@ func (s *OfflineTrainingAPIServer) startTrainingModeHandler() routing.Handler {
 	}
 }
 
-func (s *OfflineTrainingAPIServer) stopTrainingModeHandler() routing.Handler {
+func (s *APIServer) stopTrainingModeHandler() routing.Handler {
 	return func(c *routing.Context) error {
 		if s.Server.dimmingMode == DimmingWithOnlineTraining {
 			return errors.New("cannot stop offline training if online training turned on")
@@ -77,13 +77,13 @@ func (s *OfflineTrainingAPIServer) stopTrainingModeHandler() routing.Handler {
 	}
 }
 
-func (s *OfflineTrainingAPIServer) listPathProbabilitiesHandler() routing.Handler {
+func (s *APIServer) listPathProbabilitiesHandler() routing.Handler {
 	return func(c *routing.Context) error {
 		return c.Write(fmt.Sprintf("probabilities:\n%v\n", s.Server.dimming.PathProbabilities.List()))
 	}
 }
 
-func (s *OfflineTrainingAPIServer) setPathProbabilitiesHandler() routing.Handler {
+func (s *APIServer) setPathProbabilitiesHandler() routing.Handler {
 	return func(c *routing.Context) error {
 		var probabilities []filters.PathProbabilityRule
 		if err := c.Read(&probabilities); err != nil {
@@ -98,7 +98,7 @@ func (s *OfflineTrainingAPIServer) setPathProbabilitiesHandler() routing.Handler
 	}
 }
 
-func (s *OfflineTrainingAPIServer) clearPathProbabilitiesHandler() routing.Handler {
+func (s *APIServer) clearPathProbabilitiesHandler() routing.Handler {
 	return func(c *routing.Context) error {
 		s.Server.dimming.PathProbabilities.Clear()
 		return c.Write(fmt.Sprintf("probabilities cleared\n"))
