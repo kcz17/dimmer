@@ -55,7 +55,7 @@ func (s *APIServer) startOfflineTrainingModeHandler() routing.Handler {
 			return errors.New("cannot start offline training if online training turned on")
 		}
 
-		if err := s.Server.SetDimmingMode(DimmingWithOnlineTraining); err != nil {
+		if err := s.Server.SetDimmingMode(OfflineTraining); err != nil {
 			return fmt.Errorf("could not start offline training mode: err = %w\n", err)
 		}
 
