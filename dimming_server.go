@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"github.com/kcz17/dimmer/filters"
 	"github.com/kcz17/dimmer/logging"
+	"github.com/kcz17/dimmer/offlinetraining"
 	"github.com/kcz17/dimmer/onlinetraining"
-	"github.com/kcz17/dimmer/responsetimecollector"
 	"github.com/valyala/fasthttp"
 	"math/rand"
 	"net/http"
@@ -15,15 +15,26 @@ import (
 	"time"
 )
 
+type DimmingMode int
+
+const (
+	Disabled DimmingMode = iota
+	OfflineTraining
+	Dimming
+	DimmingWithOnlineTraining
+)
+
 type ServerOptions struct {
-	Logger            logging.Logger
-	FrontendAddr      string
-	BackendAddr       string
-	MaxConns          int
-	ControlLoop       *ServerControlLoop
-	RequestFilter     *filters.RequestFilter
-	PathProbabilities *filters.PathProbabilities
-	IsDimmingEnabled  bool
+	Logger                 logging.Logger
+	FrontendAddr           string
+	BackendAddr            string
+	MaxConns               int
+	ControlLoop            *ServerControlLoop
+	RequestFilter          *filters.RequestFilter
+	PathProbabilities      *filters.PathProbabilities
+	OnlineTrainingService  *onlinetraining.OnlineTraining
+	OfflineTrainingService *offlinetraining.OfflineTraining
+	IsDimmingEnabled       bool
 }
 
 // Server is a dimming-enhanced server. Dimming is actuated using a control
@@ -41,10 +52,9 @@ type Server struct {
 		server *fasthttp.Server
 		proxy  *fasthttp.HostClient
 	}
-	dimming struct {
-		// IsEnabled states whether dimming should be enabled at
-		// production-time.
-		IsEnabled bool
+	dimmingMode        DimmingMode
+	defaultDimmingMode DimmingMode
+	dimming            struct {
 		// ControlLoop reads the response time of the server and adjusts the
 		// dimming percentage at regular intervals.
 		ControlLoop       *ServerControlLoop
@@ -57,19 +67,19 @@ type Server struct {
 	// offlineTraining represents the offline training mode. When this mode is
 	// enabled, all paths under RequestFilter will be dimmed according to
 	// PathProbabilities, regardless of the ControlLoop output.
-	offlineTraining struct {
-		IsEnabled bool
-		// ResponseTimeCollector allows external clients to monitor the response
-		// time. The collector is disabled by default.
-		ResponseTimeCollector responsetimecollector.Collector
-	}
+	offlineTraining *offlinetraining.OfflineTraining
 	// isStarted is checked to ensure each Server is only ever started once.
 	isStarted bool
-	// startStopMux guards external operations which interact with the server.
-	startStopMux *sync.Mutex
+	// externalOperationsLock guards external operations which interact with the server.
+	externalOperationsLock *sync.Mutex
 }
 
 func NewServer(options *ServerOptions) *Server {
+	defaultMode := Disabled
+	if options.IsDimmingEnabled {
+		defaultMode = Dimming
+	}
+
 	return &Server{
 		logger: options.Logger,
 		proxying: struct {
@@ -85,8 +95,9 @@ func NewServer(options *ServerOptions) *Server {
 			server:       nil,
 			proxy:        nil,
 		},
+		dimmingMode:        defaultMode,
+		defaultDimmingMode: defaultMode,
 		dimming: struct {
-			IsEnabled         bool
 			ControlLoop       *ServerControlLoop
 			RequestFilter     *filters.RequestFilter
 			PathProbabilities *filters.PathProbabilities
@@ -94,24 +105,17 @@ func NewServer(options *ServerOptions) *Server {
 			ControlLoop:       options.ControlLoop,
 			RequestFilter:     options.RequestFilter,
 			PathProbabilities: options.PathProbabilities,
-			IsEnabled:         options.IsDimmingEnabled,
 		},
-		onlineTraining: onlinetraining.NewOnlineTraining(options.PathProbabilities.Copy()),
-		offlineTraining: struct {
-			IsEnabled             bool
-			ResponseTimeCollector responsetimecollector.Collector
-		}{
-			IsEnabled:             false,
-			ResponseTimeCollector: responsetimecollector.NewArrayCollector(),
-		},
-		isStarted:    false,
-		startStopMux: &sync.Mutex{},
+		onlineTraining:         options.OnlineTrainingService,
+		offlineTraining:        options.OfflineTrainingService,
+		isStarted:              false,
+		externalOperationsLock: &sync.Mutex{},
 	}
 }
 
 func (s *Server) ListenAndServe() error {
-	s.startStopMux.Lock()
-	defer s.startStopMux.Unlock()
+	s.externalOperationsLock.Lock()
+	defer s.externalOperationsLock.Unlock()
 
 	if s.isStarted {
 		return errors.New("server already started")
@@ -135,37 +139,41 @@ func (s *Server) ListenAndServe() error {
 	return nil
 }
 
-func (s *Server) StartOfflineTrainingMode() error {
-	s.startStopMux.Lock()
-	defer s.startStopMux.Unlock()
+func (s *Server) UpdatePathProbabilities(rules []filters.PathProbabilityRule) error {
+	// Path probabilities affect both dimming and online training, hence both
+	// must be accurately set.
 
-	if !s.isStarted {
-		return errors.New("StartOfflineTrainingMode() expected server running; server is not running")
+	if err := s.dimming.PathProbabilities.SetAll(rules); err != nil {
+		return fmt.Errorf("expected PathProbabilities.SetAll(probabilities = %+v) to return err != nil; got err = %w", rules, err)
 	}
 
-	s.offlineTraining.ResponseTimeCollector.Reset()
-	if err := s.dimming.ControlLoop.Reset(); err != nil {
-		return fmt.Errorf("Server.StartOfflineTrainingMode() got err when calling ControlLoop.Reset(): %w", err)
+	var paths []string
+	for _, rule := range rules {
+		paths = append(paths, rule.Path)
 	}
+	s.onlineTraining.SetPaths(paths)
 
-	s.offlineTraining.IsEnabled = true
 	return nil
 }
 
-func (s *Server) StopOfflineTrainingMode() error {
-	s.startStopMux.Lock()
-	defer s.startStopMux.Unlock()
+func (s *Server) DefaultDimmingMode() DimmingMode {
+	return s.defaultDimmingMode
+}
+
+func (s *Server) SetDimmingMode(mode DimmingMode) error {
+	s.externalOperationsLock.Lock()
+	defer s.externalOperationsLock.Unlock()
 
 	if !s.isStarted {
-		return errors.New("StopOfflineTrainingMode() expected server running; server is not running")
+		return errors.New("SetDimmingMode() expected server running; server is not running")
 	}
 
-	s.offlineTraining.ResponseTimeCollector.Reset()
+	s.offlineTraining.ResetCollector()
 	if err := s.dimming.ControlLoop.Reset(); err != nil {
-		return fmt.Errorf("Server.StopOfflineTrainingMode() got err when calling ControlLoop.Reset(): %w", err)
+		return fmt.Errorf("expected ControlLoop.ResetCollector() returns nil err; got err = %w", err)
 	}
 
-	s.offlineTraining.IsEnabled = false
+	s.dimmingMode = mode
 	return nil
 }
 
@@ -176,21 +184,23 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 
 		// If dimming or training mode is enabled, enforce dimming on dimmable
 		// components by returning a HTTP error page if a probability is met.
-		isDimmingEnabled := s.dimming.IsEnabled || s.offlineTraining.IsEnabled
+		isDimmingEnabled := s.dimmingMode != Disabled
 		isDimmableRequest := s.dimming.RequestFilter.Matches(string(ctx.Path()), string(ctx.Method()), string(req.Header.Referer()))
 		if isDimmingEnabled && isDimmableRequest {
 			// If offline training is enabled, we always dim. We use a nested
 			// conditional to reduce the mutex overhead of reading the dimming
 			// percentage.
-			shouldDim := s.offlineTraining.IsEnabled ||
+			shouldDim := s.dimmingMode == OfflineTraining ||
 				rand.Float64()*100 < s.dimming.ControlLoop.readDimmingPercentage()
 
 			// Ensure dimming is weighted according to path probabilities. Path
 			// probabilities are chosen according to whether the request is an
 			// online training candidate or not.
-			shouldUseOnlineTrainingProbabilities := s.onlineTraining.IsEnabled() &&
-				onlinetraining.RequestHasCandidateCookie(req)
-			if shouldUseOnlineTrainingProbabilities {
+			shouldUseOnlineTrainingCandidateGroupProbabilities :=
+				s.dimmingMode == DimmingWithOnlineTraining &&
+					onlinetraining.RequestHasCandidateCookie(req)
+
+			if shouldUseOnlineTrainingCandidateGroupProbabilities {
 				shouldDim = shouldDim && s.onlineTraining.SampleCandidateGroupShouldDim(string(ctx.Path()))
 			} else {
 				shouldDim = shouldDim && s.dimming.PathProbabilities.SampleShouldDim(string(ctx.Path()))
@@ -221,11 +231,12 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 		if !strings.Contains(string(ctx.Path()), ".html") {
 			s.dimming.ControlLoop.addResponseTime(duration)
 
-			if s.offlineTraining.IsEnabled {
-				s.offlineTraining.ResponseTimeCollector.Add(duration)
+			if s.dimmingMode == OfflineTraining {
+				s.offlineTraining.AddResponseTime(duration)
 			}
 
-			if s.onlineTraining.IsEnabled() && onlinetraining.RequestHasCookie(req) {
+			if s.dimmingMode == DimmingWithOnlineTraining &&
+				onlinetraining.RequestHasCookie(req) {
 				if onlinetraining.RequestHasCandidateCookie(req) {
 					s.onlineTraining.AddCandidateResponseTime(duration)
 				} else {
@@ -242,7 +253,9 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 			// restriction did not exist, a cookie could be sampled several
 			// times for each of the API requests associated with a single
 			// page, despite the user only visiting one page.
-			if s.onlineTraining.IsEnabled() && !onlinetraining.RequestHasCookie(req) {
+			if s.dimmingMode == DimmingWithOnlineTraining &&
+				strings.Contains(string(ctx.Path()), ".html") &&
+				!onlinetraining.RequestHasCookie(req) {
 				resp.Header.Cookie(onlinetraining.SampleCookie())
 			}
 		}(resp)

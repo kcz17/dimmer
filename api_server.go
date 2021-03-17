@@ -29,7 +29,7 @@ func (s *OfflineTrainingAPIServer) ListenAndServe(addr string) error {
 
 func (s *OfflineTrainingAPIServer) getTrainingModeStatsHandler() routing.Handler {
 	return func(c *routing.Context) error {
-		aggregation := s.Server.offlineTraining.ResponseTimeCollector.Aggregate()
+		aggregation := s.Server.offlineTraining.GetResponseTimeMetrics()
 		response := &struct {
 			P50 float64
 			P75 float64
@@ -50,7 +50,7 @@ func (s *OfflineTrainingAPIServer) getTrainingModeStatsHandler() routing.Handler
 
 func (s *OfflineTrainingAPIServer) startTrainingModeHandler() routing.Handler {
 	return func(c *routing.Context) error {
-		if err := s.Server.StartOfflineTrainingMode(); err != nil {
+		if err := s.Server.SetDimmingMode(DimmingWithOnlineTraining); err != nil {
 			return fmt.Errorf("could not start offline training mode: err = %w\n", err)
 		}
 
@@ -60,7 +60,7 @@ func (s *OfflineTrainingAPIServer) startTrainingModeHandler() routing.Handler {
 
 func (s *OfflineTrainingAPIServer) stopTrainingModeHandler() routing.Handler {
 	return func(c *routing.Context) error {
-		if err := s.Server.StopOfflineTrainingMode(); err != nil {
+		if err := s.Server.SetDimmingMode(s.Server.DefaultDimmingMode()); err != nil {
 			return fmt.Errorf("could not stop offline training mode: err = %w\n", err)
 		}
 
@@ -81,8 +81,8 @@ func (s *OfflineTrainingAPIServer) setPathProbabilitiesHandler() routing.Handler
 			return err
 		}
 
-		if err := s.Server.dimming.PathProbabilities.SetAll(probabilities); err != nil {
-			return fmt.Errorf("could not set probabilities: err = %w\n", err)
+		if err := s.Server.UpdatePathProbabilities(probabilities); err != nil {
+			return err
 		}
 
 		return c.Write("probabilities written\n")

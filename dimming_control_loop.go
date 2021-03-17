@@ -96,7 +96,7 @@ func (c *ServerControlLoop) Reset() error {
 		return errors.New("ServerControlLoop.Stop() failed: control loop not running")
 	}
 
-	// Reset the control loop, response time collector and PID controller
+	// ResetCollector the control loop, response time collector and PID controller
 	// in this order to ensure stale data is not written between each reset.
 	close(c.loopStop)
 	c.loopWaiter.Wait()

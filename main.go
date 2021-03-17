@@ -5,6 +5,8 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/kcz17/dimmer/filters"
 	"github.com/kcz17/dimmer/logging"
+	"github.com/kcz17/dimmer/offlinetraining"
+	"github.com/kcz17/dimmer/onlinetraining"
 	"github.com/kcz17/dimmer/pidcontroller"
 	"github.com/kcz17/dimmer/responsetimecollector"
 	"log"
@@ -74,16 +76,23 @@ func main() {
 	requestFilter := initRequestFilter()
 	pathProbabilities := initPathProbabilities()
 
+	onlineTrainingService, err := onlinetraining.NewOnlineTraining(initPaths(), 1)
+	if err != nil {
+		log.Fatalf("expected onlineTrainingService to return nil err; got err = %v", err)
+	}
+
 	// Serve the reverse proxy with dimming control loop.
 	server := NewServer(&ServerOptions{
-		FrontendAddr:      fmt.Sprintf(":%v", config.FrontEndPort),
-		BackendAddr:       config.BackEndHost + ":" + config.BackEndPort,
-		MaxConns:          2048,
-		ControlLoop:       controlLoop,
-		RequestFilter:     requestFilter,
-		PathProbabilities: pathProbabilities,
-		Logger:            logger,
-		IsDimmingEnabled:  config.IsDimmerEnabled,
+		FrontendAddr:           fmt.Sprintf(":%v", config.FrontEndPort),
+		BackendAddr:            config.BackEndHost + ":" + config.BackEndPort,
+		MaxConns:               2048,
+		ControlLoop:            controlLoop,
+		RequestFilter:          requestFilter,
+		PathProbabilities:      pathProbabilities,
+		Logger:                 logger,
+		IsDimmingEnabled:       config.IsDimmerEnabled,
+		OnlineTrainingService:  onlineTrainingService,
+		OfflineTrainingService: offlinetraining.NewOfflineTraining(),
 	})
 
 	// Start the server in a goroutine so we can separately block the main
@@ -112,6 +121,14 @@ func initLogger(config *Config) logging.Logger {
 		log.Fatalf("expected env var LOGGER_DRIVER one of {noop, stdout, influxdb}; got %s", config.LoggerDriver)
 	}
 	return logger
+}
+
+func initPaths() []string {
+	return []string{
+		"recommender",
+		"news",
+		"cart",
+	}
 }
 
 func initRequestFilter() *filters.RequestFilter {
