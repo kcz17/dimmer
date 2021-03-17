@@ -14,6 +14,11 @@ type RequestFilterRule = string
 // matches a rule within its rules set. Matches can be excluded if the referer
 // for matching rule contains an exclusion from refererExclusions. The filter
 // is insensitive to the leading slash of a path.
+//
+// A key invariant is that Matches operations must be insensitive of a path's
+// leading slash. To keep Matches lookup O(1), AddPath is responsible for O(n)
+// string operations which add both leading slash inclusive and exclusive paths
+// to the map, enabling O(1) Matches lookup.
 type RequestFilter struct {
 	// rules are a set of Method-Path combinations which
 	rules map[RequestFilterRule]bool
