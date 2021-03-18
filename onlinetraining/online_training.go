@@ -154,7 +154,7 @@ func (t *OnlineTraining) sampleCandidateGroupProbabilities() []filters.PathProba
 
 	// Sample a set of probabilities for use in rules. Order does not matter
 	// as sampled probabilities are independent of paths.
-	probabilities := t.probabilitySampler.Sample(t.candidatePathProbabilities.NumPaths())
+	probabilities := t.probabilitySampler.Sample(len(t.paths))
 	var rules []filters.PathProbabilityRule
 	for i, path := range t.paths {
 		rules = append(rules, filters.PathProbabilityRule{

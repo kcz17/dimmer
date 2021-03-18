@@ -51,18 +51,6 @@ func (p *PathProbabilities) List() map[string]float64 {
 	return p.probabilities
 }
 
-func (p *PathProbabilities) NumPaths() int {
-	p.probabilitiesMux.RLock()
-	defer p.probabilitiesMux.RUnlock()
-
-	// Ensure our leading slash invariant is maintained.
-	if len(p.probabilities)%2 != 0 {
-		panic(fmt.Sprintf("expected p.probabilities containing even number of items; got p.probabilities = %+v", p.probabilities))
-	}
-
-	return len(p.probabilities)
-}
-
 func (p *PathProbabilities) Get(path string) float64 {
 	p.probabilitiesMux.RLock()
 	probability, exists := p.probabilities[path]
