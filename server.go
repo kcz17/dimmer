@@ -115,7 +115,6 @@ func NewServer(options *ServerOptions) *Server {
 
 func (s *Server) ListenAndServe() error {
 	s.externalOperationsLock.Lock()
-	defer s.externalOperationsLock.Unlock()
 
 	if s.isStarted {
 		return errors.New("server already started")
@@ -126,16 +125,18 @@ func (s *Server) ListenAndServe() error {
 		Handler:         s.requestHandler(),
 		CloseOnShutdown: true,
 	}
+	s.isStarted = true
 
 	if err := s.dimming.ControlLoop.Start(); err != nil {
 		return fmt.Errorf("Server.ListenAndServe() got err when calling ControlLoop.ListenAndServe(): %w", err)
 	}
 
+	s.externalOperationsLock.Unlock()
+
 	if err := s.proxying.server.ListenAndServe(s.proxying.FrontendAddr); err != nil {
 		return fmt.Errorf("Server.ListenAndServe() got fasthttp server error: %w", err)
 	}
 
-	s.isStarted = true
 	return nil
 }
 
