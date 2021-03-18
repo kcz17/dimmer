@@ -101,7 +101,7 @@ func (t *OnlineTraining) trainingLoop() {
 			if err := t.candidatePathProbabilities.SetAll(newCandidateRules); err != nil {
 				panic(fmt.Errorf("expected t.candidatePathProbabilities.SetAll(rules = %+v) returns nil err; got err = %w", newCandidateRules, err))
 			}
-			fmt.Printf("[%s] setting new candidate rules: %+v\n", time.Now().Format(time.StampMilli), newCandidateRules)
+			fmt.Printf("[%s] testing new candidate rules: %+v\n", time.Now().Format(time.StampMilli), newCandidateRules)
 
 			t.candidateGroupResponseTimes.Reset()
 			t.controlGroupResponseTimes.Reset()
@@ -118,7 +118,8 @@ func (t *OnlineTraining) trainingLoop() {
 			// Test whether the rules collected are significant, overriding the
 			// main path probabilities if so.
 			comparison := t.checkCandidateImprovesResponseTimes()
-			fmt.Printf("[%s] significant reduction: %t\n", time.Now().Format(time.StampMilli), comparison)
+			fmt.Printf("[%s] tested candidate rules: %+v\n", time.Now().Format(time.StampMilli), newCandidateRules)
+			fmt.Printf("[%s] significant reduction? %t\n", time.Now().Format(time.StampMilli), comparison)
 			if comparison {
 				fmt.Printf("[%s] setting control to candidate rules\n", time.Now().Format(time.StampMilli))
 				t.logger.LogControlProbabilityChange(newCandidateRules)
@@ -183,8 +184,8 @@ func (t *OnlineTraining) checkCandidateImprovesResponseTimes() bool {
 	}
 
 	// Use the heuristic that the candidate probabilities must decrease the
-	// control 95th percentile by at least 5% of the control 95th percentile.
-	return candidateP95 <= (controlP95 - controlP95*0.05)
+	// control 95th percentile by at least 10% of the control 95th percentile.
+	return candidateP95 <= (controlP95 - controlP95*0.1)
 }
 
 func RequestHasCookie(request *fasthttp.Request) bool {
