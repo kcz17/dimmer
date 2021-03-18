@@ -63,34 +63,6 @@ func (s *APIServer) setServerModeHandler() routing.Handler {
 	}
 }
 
-func (s *APIServer) startOnlineTrainingModeHandler() routing.Handler {
-	return func(c *routing.Context) error {
-		if s.Server.dimmingMode == OfflineTraining {
-			return errors.New("cannot start online training if offline training turned on")
-		}
-
-		if err := s.Server.SetDimmingMode(DimmingWithOnlineTraining); err != nil {
-			return fmt.Errorf("could not start online training mode: err = %w\n", err)
-		}
-
-		return c.Write("offline training mode started\n")
-	}
-}
-
-func (s *APIServer) stopOnlineTrainingModeHandler() routing.Handler {
-	return func(c *routing.Context) error {
-		if s.Server.dimmingMode == OfflineTraining {
-			return errors.New("cannot stop online training if offline training turned on")
-		}
-
-		if err := s.Server.SetDimmingMode(s.Server.defaultDimmingMode); err != nil {
-			return fmt.Errorf("could not stop offline training mode: err = %w\n", err)
-		}
-
-		return c.Write("offline training mode stopped\n")
-	}
-}
-
 func (s *APIServer) getOfflineTrainingStatsHandler() routing.Handler {
 	return func(c *routing.Context) error {
 		aggregation := s.Server.offlineTraining.GetResponseTimeMetrics()
@@ -109,34 +81,6 @@ func (s *APIServer) getOfflineTrainingStatsHandler() routing.Handler {
 			return fmt.Errorf("could not marshal aggregation: err = %w", err)
 		}
 		return c.Write(b)
-	}
-}
-
-func (s *APIServer) startOfflineTrainingModeHandler() routing.Handler {
-	return func(c *routing.Context) error {
-		if s.Server.dimmingMode == DimmingWithOnlineTraining {
-			return errors.New("cannot start offline training if online training turned on")
-		}
-
-		if err := s.Server.SetDimmingMode(OfflineTraining); err != nil {
-			return fmt.Errorf("could not start offline training mode: err = %w\n", err)
-		}
-
-		return c.Write("offline training mode started\n")
-	}
-}
-
-func (s *APIServer) stopOfflineTrainingModeHandler() routing.Handler {
-	return func(c *routing.Context) error {
-		if s.Server.dimmingMode == DimmingWithOnlineTraining {
-			return errors.New("cannot stop offline training if online training turned on")
-		}
-
-		if err := s.Server.SetDimmingMode(s.Server.defaultDimmingMode); err != nil {
-			return fmt.Errorf("could not stop offline training mode: err = %w\n", err)
-		}
-
-		return c.Write("offline training mode stopped\n")
 	}
 }
 
