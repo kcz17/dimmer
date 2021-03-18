@@ -264,7 +264,7 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 			if s.dimmingMode == DimmingWithOnlineTraining &&
 				strings.Contains(string(ctx.Path()), ".html") &&
 				!onlinetraining.RequestHasCookie(req) {
-				resp.Header.Cookie(onlinetraining.SampleCookie())
+				resp.Header.SetCookie(onlinetraining.SampleCookie())
 			}
 		}(resp)
 	}
