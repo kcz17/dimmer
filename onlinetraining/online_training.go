@@ -188,7 +188,7 @@ func (t *OnlineTraining) checkCandidateImprovesResponseTimes() bool {
 }
 
 func RequestHasCookie(request *fasthttp.Request) bool {
-	return len(request.Header.Cookie(onlineTrainingCookieKey)) == 0
+	return len(request.Header.Cookie(onlineTrainingCookieKey)) != 0
 }
 
 func RequestHasCandidateCookie(request *fasthttp.Request) bool {
