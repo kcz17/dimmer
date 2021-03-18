@@ -70,7 +70,7 @@ func (l *influxDBLogger) LogPIDControllerState(p float64, i float64, d float64, 
 }
 
 func (l *influxDBLogger) LogControlProbabilityChange(probabilities []filters.PathProbabilityRule) {
-	point := influxdb2.NewPointWithMeasurement("dimmer_candidate_probabilities").
+	point := influxdb2.NewPointWithMeasurement("dimmer_control_probabilities").
 		SetTime(time.Now())
 	for _, probability := range probabilities {
 		point.AddField(probability.Path, probability.Probability)
