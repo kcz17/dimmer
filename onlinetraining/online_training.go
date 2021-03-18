@@ -206,6 +206,6 @@ func controlCookie() *fasthttp.Cookie {
 func candidateCookie() *fasthttp.Cookie {
 	cookie := &fasthttp.Cookie{}
 	cookie.SetKey(onlineTrainingCookieKey)
-	cookie.SetValue(onlineTrainingCookieControl)
+	cookie.SetValue(onlineTrainingCookieCandidate)
 	return cookie
 }
