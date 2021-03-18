@@ -90,43 +90,43 @@ func (t *OnlineTraining) StopLoop() error {
 func (t *OnlineTraining) trainingLoop() {
 	defer t.loopWaiter.Done()
 	for {
-		// Stop the control loop when Stop() called.
-		if <-t.loopStop {
-			return
-		}
-
-		// Sample new rules.
-		newCandidateRules := t.sampleCandidateGroupProbabilities()
-		t.candidatePathProbabilities.Clear()
-		if err := t.candidatePathProbabilities.SetAll(newCandidateRules); err != nil {
-			panic(fmt.Errorf("expected t.candidatePathProbabilities.SetAll(rules = %+v) returns nil err; got err = %w", newCandidateRules, err))
-		}
-		fmt.Printf("[%s] setting new candidate rules: %+v\n", time.Now().Format(time.StampMilli), newCandidateRules)
-
-		t.candidateGroupResponseTimes.Reset()
-		t.controlGroupResponseTimes.Reset()
-
-		// Wait for enough data to be collected while continuing to listen for
-		// Stop() in a non-blocking manner.
 		select {
+		// Stop the control loop when Stop() called.
 		case <-t.loopStop:
 			return
-		case <-time.After(2 * time.Minute):
-			break
-		}
+		default:
+			// Sample new rules.
+			newCandidateRules := t.sampleCandidateGroupProbabilities()
+			t.candidatePathProbabilities.Clear()
+			if err := t.candidatePathProbabilities.SetAll(newCandidateRules); err != nil {
+				panic(fmt.Errorf("expected t.candidatePathProbabilities.SetAll(rules = %+v) returns nil err; got err = %w", newCandidateRules, err))
+			}
+			fmt.Printf("[%s] setting new candidate rules: %+v\n", time.Now().Format(time.StampMilli), newCandidateRules)
 
-		// Test whether the rules collected are significant, overriding the
-		// main path probabilities if so.
-		comparison := t.checkCandidateImprovesResponseTimes()
-		fmt.Printf("[%s] significant reduction: %t\n", time.Now().Format(time.StampMilli), comparison)
-		if comparison {
-			fmt.Printf("[%s] setting control to candidate rules\n", time.Now().Format(time.StampMilli))
-			t.logger.LogControlProbabilityChange(newCandidateRules)
-			if err := t.controlPathProbabilities.SetAll(newCandidateRules); err != nil {
-				panic(fmt.Errorf("expected t.controlPathProbabilities.SetAll(rules = %+v) returns nil err; got err = %w", err))
+			t.candidateGroupResponseTimes.Reset()
+			t.controlGroupResponseTimes.Reset()
+
+			// Wait for enough data to be collected while continuing to listen for
+			// Stop() in a non-blocking manner.
+			select {
+			case <-t.loopStop:
+				return
+			case <-time.After(2 * time.Minute):
+				break
+			}
+
+			// Test whether the rules collected are significant, overriding the
+			// main path probabilities if so.
+			comparison := t.checkCandidateImprovesResponseTimes()
+			fmt.Printf("[%s] significant reduction: %t\n", time.Now().Format(time.StampMilli), comparison)
+			if comparison {
+				fmt.Printf("[%s] setting control to candidate rules\n", time.Now().Format(time.StampMilli))
+				t.logger.LogControlProbabilityChange(newCandidateRules)
+				if err := t.controlPathProbabilities.SetAll(newCandidateRules); err != nil {
+					panic(fmt.Errorf("expected t.controlPathProbabilities.SetAll(rules = %+v) returns nil err; got err = %w", err))
+				}
 			}
 		}
-
 	}
 }
 
