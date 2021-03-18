@@ -174,6 +174,14 @@ func (t *OnlineTraining) checkCandidateImprovesResponseTimes() bool {
 	candidateP95 := float64(candidateAggregate.P95) / float64(time.Second)
 	fmt.Printf("[%s] control p95: %.3f, candidate p95: %.3f \n", time.Now().Format(time.StampMilli), controlP95, candidateP95)
 
+	// Use a heuristic based on whether the P95 > 50ms to determine whether
+	// enough data has been collected.
+	candidateCollectedEnoughData := candidateP95 < 0.05
+	if !candidateCollectedEnoughData {
+		fmt.Printf("[%s] candidate p95 does not have enough data", time.Now().Format(time.StampMilli))
+		return false
+	}
+
 	// Use the heuristic that the candidate probabilities must decrease the
 	// control 95th percentile by at least 5% of the control 95th percentile.
 	return candidateP95 <= (controlP95 - controlP95*0.05)
