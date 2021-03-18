@@ -17,18 +17,50 @@ type APIServer struct {
 func (s *APIServer) ListenAndServe(addr string) error {
 	router := routing.New()
 
-	router.Post("/training/online", s.startOfflineTrainingModeHandler())
-	router.Delete("/training/online", s.stopOfflineTrainingModeHandler())
-
-	router.Get("/training/offline/stats", s.getOfflineTrainingStatsHandler())
-	router.Post("/training/offline", s.startOfflineTrainingModeHandler())
-	router.Delete("/training/offline", s.stopOfflineTrainingModeHandler())
+	router.Post("/mode", s.setServerModeHandler())
 
 	router.Get("/probabilities", s.listPathProbabilitiesHandler())
 	router.Post("/probabilities", s.setPathProbabilitiesHandler())
 	router.Delete("/probabilities", s.clearPathProbabilitiesHandler())
 
 	return fasthttp.ListenAndServe(addr, router.HandleRequest)
+}
+
+func (s *APIServer) setServerModeHandler() routing.Handler {
+	return func(c *routing.Context) error {
+		mode := &struct {
+			Mode string
+		}{}
+		if err := c.Read(&mode); err != nil {
+			return fmt.Errorf("could not parse body: %w", err)
+		}
+
+		var err error
+		switch mode.Mode {
+		case "Default":
+			err = s.Server.SetDimmingMode(s.Server.defaultDimmingMode)
+		case "Disabled":
+			err = s.Server.SetDimmingMode(Disabled)
+			break
+		case "OfflineTraining":
+			err = s.Server.SetDimmingMode(OfflineTraining)
+			break
+		case "Dimming":
+			err = s.Server.SetDimmingMode(Dimming)
+			break
+		case "DimmingWithOnlineTraining":
+			err = s.Server.SetDimmingMode(DimmingWithOnlineTraining)
+			break
+		default:
+			err = errors.New("mode must be one of {Default|Disabled|OfflineTraining|Dimming|DimmingWithOnlineTraining}")
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		return c.Write("mode set\n")
+	}
 }
 
 func (s *APIServer) startOnlineTrainingModeHandler() routing.Handler {
