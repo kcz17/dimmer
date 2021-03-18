@@ -7,7 +7,7 @@ import (
 	"github.com/kcz17/dimmer/logging"
 	"github.com/kcz17/dimmer/offlinetraining"
 	"github.com/kcz17/dimmer/onlinetraining"
-	"github.com/kcz17/dimmer/pidcontroller"
+	"github.com/kcz17/dimmer/pid"
 	"github.com/kcz17/dimmer/responsetimecollector"
 	"log"
 )
@@ -157,9 +157,9 @@ func initPathProbabilities() *filters.PathProbabilities {
 	return p
 }
 
-func initPIDController(config *Config) *pidcontroller.PIDController {
-	c, err := pidcontroller.NewPIDController(
-		pidcontroller.NewRealtimeClock(),
+func initPIDController(config *Config) *pid.PIDController {
+	c, err := pid.NewPIDController(
+		pid.NewRealtimeClock(),
 		config.ControllerSetpoint,
 		config.ControllerKp,
 		config.ControllerKi,
@@ -185,7 +185,7 @@ func initPIDController(config *Config) *pidcontroller.PIDController {
 
 func initControlLoop(
 	config *Config,
-	pid *pidcontroller.PIDController,
+	pid *pid.PIDController,
 	responseTimeCollector responsetimecollector.Collector,
 	logger logging.Logger,
 ) *ServerControlLoop {

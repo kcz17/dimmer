@@ -1,4 +1,4 @@
-package pidcontroller
+package pid
 
 import "time"
 

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/kcz17/dimmer/logging"
-	"github.com/kcz17/dimmer/pidcontroller"
+	"github.com/kcz17/dimmer/pid"
 	"github.com/kcz17/dimmer/responsetimecollector"
 	"sync"
 	"time"
@@ -26,7 +26,7 @@ type ServerControlLoop struct {
 
 	// pid is a naive PID controller which outputs a percentage given response
 	// time input.
-	pid *pidcontroller.PIDController
+	pid *pid.PIDController
 
 	// responseTimeCollector aggregates response times, allowing for calculation
 	// of a percentile response time.
@@ -54,7 +54,7 @@ type ServerControlLoop struct {
 
 // NewServerControlLoop initialises the control loop.
 func NewServerControlLoop(
-	pid *pidcontroller.PIDController,
+	pid *pid.PIDController,
 	responseTimeCollector responsetimecollector.Collector,
 	responseTimePercentile string,
 	logger logging.Logger,
