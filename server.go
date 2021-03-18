@@ -253,19 +253,19 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 			}
 		}
 
+		// Only set an online training cookie for .html pages. If this
+		// restriction did not exist, a cookie could be sampled several
+		// times for each of the API requests associated with a single
+		// page, despite the user only visiting one page.
+		if s.dimmingMode == DimmingWithOnlineTraining &&
+			strings.Contains(string(ctx.Path()), ".html") &&
+			!onlinetraining.RequestHasCookie(req) {
+			resp.Header.SetCookie(onlinetraining.SampleCookie())
+		}
+
 		func(resp *fasthttp.Response) {
 			// Remove connection header per RFC2616.
 			resp.Header.Del("Connection")
-
-			// Only set an online training cookie for .html pages. If this
-			// restriction did not exist, a cookie could be sampled several
-			// times for each of the API requests associated with a single
-			// page, despite the user only visiting one page.
-			if s.dimmingMode == DimmingWithOnlineTraining &&
-				strings.Contains(string(ctx.Path()), ".html") &&
-				!onlinetraining.RequestHasCookie(req) {
-				resp.Header.SetCookie(onlinetraining.SampleCookie())
-			}
 		}(resp)
 	}
 }
