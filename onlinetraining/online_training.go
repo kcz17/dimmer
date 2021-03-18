@@ -176,7 +176,7 @@ func (t *OnlineTraining) checkCandidateImprovesResponseTimes() bool {
 
 	// Use a heuristic based on whether the P95 > 50ms to determine whether
 	// enough data has been collected.
-	candidateCollectedEnoughData := candidateP95 < 0.05
+	candidateCollectedEnoughData := candidateP95 > 0.05
 	if !candidateCollectedEnoughData {
 		fmt.Printf("[%s] candidate p95 does not have enough data", time.Now().Format(time.StampMilli))
 		return false
