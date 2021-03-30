@@ -22,6 +22,12 @@ func NewArrayCollector() *arrayCollector {
 	}
 }
 
+func (c *arrayCollector) All() []float64 {
+	c.responseTimesSecondsMux.Lock()
+	defer c.responseTimesSecondsMux.Unlock()
+	return c.responseTimesSeconds
+}
+
 func (c *arrayCollector) Add(t time.Duration) {
 	c.responseTimesSecondsMux.Lock()
 	c.responseTimesSeconds = append(c.responseTimesSeconds, float64(t)/float64(time.Second))

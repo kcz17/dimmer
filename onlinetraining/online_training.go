@@ -167,7 +167,23 @@ func (t *OnlineTraining) sampleCandidateGroupProbabilities() []filters.PathProba
 	return rules
 }
 
+func floatsToStrings(floats []float64) []string {
+	var out []string
+	for _, val := range floats {
+		out = append(out, fmt.Sprintf("%.3f", val))
+	}
+	return out
+}
+
 func (t *OnlineTraining) checkCandidateImprovesResponseTimes() bool {
+	// For investigation of an improved response time comparison algorithm,
+	// output all response times for testing purposes.
+	// TODO(kz): Remove this when testing done.
+	candidateAll := floatsToStrings(t.candidateGroupResponseTimes.All())
+	controlAll := floatsToStrings(t.controlGroupResponseTimes.All())
+	fmt.Printf("[%s] candidate timings:\n\t%s\n", time.Now().Format(time.StampMilli), strings.Join(candidateAll, ","))
+	fmt.Printf("[%s] control timings:\n\t%s\n", time.Now().Format(time.StampMilli), strings.Join(controlAll, ","))
+
 	candidateAggregate := t.candidateGroupResponseTimes.Aggregate()
 	controlAggregate := t.controlGroupResponseTimes.Aggregate()
 

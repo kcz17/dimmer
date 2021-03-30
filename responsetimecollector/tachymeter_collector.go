@@ -2,6 +2,8 @@ package responsetimecollector
 
 import (
 	"github.com/jamiealquiza/tachymeter"
+	"math"
+	"sync/atomic"
 	"time"
 )
 
@@ -16,6 +18,26 @@ func NewTachymeterCollector(window int) *tachymeterCollector {
 	return &tachymeterCollector{tach: tachymeter.New(&tachymeter.Config{
 		Size: window,
 	})}
+}
+
+func (c *tachymeterCollector) All() []float64 {
+	c.tach.Lock()
+	defer c.tach.Unlock()
+
+	if atomic.LoadUint64(&c.tach.Count) == 0 {
+		return []float64{}
+	}
+
+	samples := int(math.Min(float64(atomic.LoadUint64(&c.tach.Count)), float64(c.tach.Size)))
+	durations := make([]time.Duration, samples)
+	copy(durations, c.tach.Times[:samples])
+
+	var durationsSeconds []float64
+	for i := range durations {
+		durationsSeconds = append(durationsSeconds, float64(durations[i])/float64(time.Second))
+	}
+
+	return durationsSeconds
 }
 
 func (c *tachymeterCollector) Add(t time.Duration) {
