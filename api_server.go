@@ -23,6 +23,8 @@ func (s *APIServer) ListenAndServe(addr string) error {
 	router.Post("/probabilities", s.setPathProbabilitiesHandler())
 	router.Delete("/probabilities", s.clearPathProbabilitiesHandler())
 
+	router.Get("/training/stats", s.getOfflineTrainingStatsHandler())
+
 	return fasthttp.ListenAndServe(addr, router.HandleRequest)
 }
 
