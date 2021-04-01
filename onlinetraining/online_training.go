@@ -17,7 +17,7 @@ import (
 const onlineTrainingCookieKey = "ONLINE_TRAINING"
 const onlineTrainingCookieControl = "CONTROL"
 const onlineTrainingCookieCandidate = "CANDIDATE"
-const onlineTrainingCookieCandidateProbability = 0.05
+const onlineTrainingCookieCandidateProbability = 0.1
 
 type OnlineTraining struct {
 	logger                      logging.Logger
@@ -47,8 +47,8 @@ func NewOnlineTraining(logger logging.Logger, paths []string, controlPathProbabi
 
 	return &OnlineTraining{
 		logger:                      logger,
-		controlGroupResponseTimes:   responsetimecollector.NewTachymeterCollector(100),
-		candidateGroupResponseTimes: responsetimecollector.NewTachymeterCollector(100),
+		controlGroupResponseTimes:   responsetimecollector.NewTachymeterCollector(2000),
+		candidateGroupResponseTimes: responsetimecollector.NewArrayCollector(),
 		candidatePathProbabilities:  candidatePathProbabilities,
 		paths:                       paths,
 		controlPathProbabilities:    controlPathProbabilities,

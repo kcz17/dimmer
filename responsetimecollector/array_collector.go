@@ -25,7 +25,9 @@ func NewArrayCollector() *arrayCollector {
 func (c *arrayCollector) All() []float64 {
 	c.responseTimesSecondsMux.Lock()
 	defer c.responseTimesSecondsMux.Unlock()
-	return c.responseTimesSeconds
+	times := make([]float64, len(c.responseTimesSeconds))
+	copy(times, c.responseTimesSeconds)
+	return times
 }
 
 func (c *arrayCollector) Add(t time.Duration) {
