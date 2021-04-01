@@ -17,7 +17,7 @@ import (
 const onlineTrainingCookieKey = "ONLINE_TRAINING"
 const onlineTrainingCookieControl = "CONTROL"
 const onlineTrainingCookieCandidate = "CANDIDATE"
-const onlineTrainingCookieCandidateProbability = 0.1
+const onlineTrainingCookieCandidateProbability = 0.05
 
 type OnlineTraining struct {
 	logger                      logging.Logger
@@ -118,7 +118,12 @@ func (t *OnlineTraining) trainingLoop() {
 			// Test whether the rules collected are significant, overriding the
 			// main path probabilities if so.
 			comparison := t.checkCandidateImprovesResponseTimes()
-			fmt.Printf("[%s] [Online Testing] finished test with candidate rules: %+v\n", time.Now().Format(time.StampMilli), newCandidateRules)
+			fmt.Printf(
+				"[%s] [Online Testing] finished test with %d candidate response times collected for candidate rules: %+v\n",
+				time.Now().Format(time.StampMilli),
+				t.candidateGroupResponseTimes.Len(),
+				newCandidateRules,
+			)
 			fmt.Printf("[%s] [Online Testing] significant reduction? %t\n", time.Now().Format(time.StampMilli), comparison)
 			if comparison {
 				fmt.Printf("[%s] [Online Testing] updating control with candidate rules\n", time.Now().Format(time.StampMilli))

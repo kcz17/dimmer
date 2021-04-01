@@ -10,6 +10,7 @@ type Aggregation struct {
 
 type Collector interface {
 	All() []float64          // All gets all the response times collected.
+	Len() int                // Len gets the number of response times collected.
 	Add(t time.Duration)     // Add sends a new response time to the collector.
 	Aggregate() *Aggregation // Aggregate calculates aggregate metrics over a defined time period.
 	Reset()                  // Reset resets the state of the collector for reuse.

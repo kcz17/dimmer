@@ -11,13 +11,17 @@ import (
 // calculate timings locally. This collector should be used where the overhead
 // of local instrumentation does not affect the use case.
 type tachymeterCollector struct {
-	tach *tachymeter.Tachymeter
+	window int
+	tach   *tachymeter.Tachymeter
 }
 
 func NewTachymeterCollector(window int) *tachymeterCollector {
-	return &tachymeterCollector{tach: tachymeter.New(&tachymeter.Config{
-		Size: window,
-	})}
+	return &tachymeterCollector{
+		window: window,
+		tach: tachymeter.New(&tachymeter.Config{
+			Size: window,
+		}),
+	}
 }
 
 func (c *tachymeterCollector) All() []float64 {
@@ -38,6 +42,10 @@ func (c *tachymeterCollector) All() []float64 {
 	}
 
 	return durationsSeconds
+}
+
+func (c *tachymeterCollector) Len() int {
+	return c.window
 }
 
 func (c *tachymeterCollector) Add(t time.Duration) {

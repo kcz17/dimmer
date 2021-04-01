@@ -54,6 +54,7 @@ func KolmogorovSmirnovTestRejection(control []float64, candidate []float64, perc
 	// Pass in nil weights as gonum's stat package allows inputs to be
 	// weighted, which is not relevant to our situation.
 	testStatistic := stat.KolmogorovSmirnov(sortedControl, nil, sortedCandidate, nil)
+	fmt.Printf("test statistic: %.3f\n", testStatistic)
 
 	return testStatistic > criticalValue
 }
