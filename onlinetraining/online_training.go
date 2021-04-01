@@ -6,6 +6,7 @@ import (
 	"github.com/kcz17/dimmer/filters"
 	"github.com/kcz17/dimmer/logging"
 	"github.com/kcz17/dimmer/responsetimecollector"
+	"github.com/kcz17/dimmer/stats"
 	"github.com/valyala/fasthttp"
 	"math/rand"
 	"strings"
@@ -101,7 +102,7 @@ func (t *OnlineTraining) trainingLoop() {
 			if err := t.candidatePathProbabilities.SetAll(newCandidateRules); err != nil {
 				panic(fmt.Errorf("expected t.candidatePathProbabilities.SetAll(rules = %+v) returns nil err; got err = %w", newCandidateRules, err))
 			}
-			fmt.Printf("[%s] testing new candidate rules: %+v\n", time.Now().Format(time.StampMilli), newCandidateRules)
+			fmt.Printf("[%s] [Online Testing] starting test with candidate rules: %+v\n", time.Now().Format(time.StampMilli), newCandidateRules)
 
 			t.candidateGroupResponseTimes.Reset()
 			t.controlGroupResponseTimes.Reset()
@@ -118,13 +119,13 @@ func (t *OnlineTraining) trainingLoop() {
 			// Test whether the rules collected are significant, overriding the
 			// main path probabilities if so.
 			comparison := t.checkCandidateImprovesResponseTimes()
-			fmt.Printf("[%s] tested candidate rules: %+v\n", time.Now().Format(time.StampMilli), newCandidateRules)
-			fmt.Printf("[%s] significant reduction? %t\n", time.Now().Format(time.StampMilli), comparison)
+			fmt.Printf("[%s] [Online Testing] finished test with candidate rules: %+v\n", time.Now().Format(time.StampMilli), newCandidateRules)
+			fmt.Printf("[%s] [Online Testing] significant reduction? %t\n", time.Now().Format(time.StampMilli), comparison)
 			if comparison {
-				fmt.Printf("[%s] setting control to candidate rules\n", time.Now().Format(time.StampMilli))
+				fmt.Printf("[%s] [Online Testing] updating control with candidate rules\n", time.Now().Format(time.StampMilli))
 				t.logger.LogControlProbabilityChange(newCandidateRules)
 				if err := t.controlPathProbabilities.SetAll(newCandidateRules); err != nil {
-					panic(fmt.Errorf("expected t.controlPathProbabilities.SetAll(rules = %+v) returns nil err; got err = %w", err))
+					panic(fmt.Errorf("expected t.controlPathProbabilities.SetAll(rules = %+v) returns nil err; got err = %w", newCandidateRules, err))
 				}
 			}
 		}
@@ -167,41 +168,35 @@ func (t *OnlineTraining) sampleCandidateGroupProbabilities() []filters.PathProba
 	return rules
 }
 
-func floatsToStrings(floats []float64) []string {
-	var out []string
-	for _, val := range floats {
-		out = append(out, fmt.Sprintf("%.3f", val))
-	}
-	return out
-}
-
 func (t *OnlineTraining) checkCandidateImprovesResponseTimes() bool {
-	// For investigation of an improved response time comparison algorithm,
-	// output all response times for testing purposes.
-	// TODO(kz): Remove this when testing done.
-	candidateAll := floatsToStrings(t.candidateGroupResponseTimes.All())
-	controlAll := floatsToStrings(t.controlGroupResponseTimes.All())
-	fmt.Printf("[%s] candidate timings:\n\t%s\n", time.Now().Format(time.StampMilli), strings.Join(candidateAll, ","))
-	fmt.Printf("[%s] control timings:\n\t%s\n", time.Now().Format(time.StampMilli), strings.Join(controlAll, ","))
-
-	candidateAggregate := t.candidateGroupResponseTimes.Aggregate()
 	controlAggregate := t.controlGroupResponseTimes.Aggregate()
+	candidateAggregate := t.candidateGroupResponseTimes.Aggregate()
 
 	controlP95 := float64(controlAggregate.P95) / float64(time.Second)
 	candidateP95 := float64(candidateAggregate.P95) / float64(time.Second)
-	fmt.Printf("[%s] control p95: %.3f, candidate p95: %.3f \n", time.Now().Format(time.StampMilli), controlP95, candidateP95)
+	fmt.Printf("[%s] [Online Testing] control p95: %.3f, candidate p95: %.3f\n", time.Now().Format(time.StampMilli), controlP95, candidateP95)
 
 	// Use a heuristic based on whether the P95 > 50ms to determine whether
-	// enough data has been collected.
+	// enough data has been collected and a significant change is possible.
 	candidateCollectedEnoughData := candidateP95 > 0.05
 	if !candidateCollectedEnoughData {
 		fmt.Printf("[%s] candidate p95 does not have enough data", time.Now().Format(time.StampMilli))
 		return false
 	}
 
-	// Use the heuristic that the candidate probabilities must decrease the
-	// control 95th percentile by at least 10% of the control 95th percentile.
-	return candidateP95 <= (controlP95 - controlP95*0.1)
+	// The candidate P95 must be lower than the control P95 for there to be
+	// a potential improvement in response times.
+	if controlP95 >= candidateP95 {
+		return false
+	}
+
+	// Test whether there is a significant change in response time distributions
+	// by performing a Kolmogorov-Smirnov test at the 95th percentile. The 95th
+	// percentile has been chosen based on empirical tests where the 99th
+	// percentile is overly sensitive.
+	controlAll := t.controlGroupResponseTimes.All()
+	candidateAll := t.candidateGroupResponseTimes.All()
+	return stats.KolmogorovSmirnovTestRejection(controlAll, candidateAll, stats.P95)
 }
 
 func RequestHasCookie(request *fasthttp.Request) bool {
