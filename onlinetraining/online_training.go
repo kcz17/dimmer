@@ -24,7 +24,6 @@ type OnlineTraining struct {
 	controlGroupResponseTimes   responsetimecollector.Collector
 	candidateGroupResponseTimes responsetimecollector.Collector
 	candidatePathProbabilities  *filters.PathProbabilities
-	probabilitySampler          *ProbabilitySampler
 	paths                       []string
 	// controlPathProbabilities is a pointer to the main ("control") group
 	// of path probabilities applied to the majority of requests under Server.
@@ -51,7 +50,6 @@ func NewOnlineTraining(logger logging.Logger, paths []string, controlPathProbabi
 		controlGroupResponseTimes:   responsetimecollector.NewTachymeterCollector(100),
 		candidateGroupResponseTimes: responsetimecollector.NewTachymeterCollector(100),
 		candidatePathProbabilities:  candidatePathProbabilities,
-		probabilitySampler:          NewProbabilitySampler(),
 		paths:                       paths,
 		controlPathProbabilities:    controlPathProbabilities,
 		mux:                         &sync.Mutex{},
@@ -90,6 +88,7 @@ func (t *OnlineTraining) StopLoop() error {
 
 func (t *OnlineTraining) trainingLoop() {
 	defer t.loopWaiter.Done()
+
 	for {
 		select {
 		// Stop the control loop when Stop() called.
@@ -154,14 +153,21 @@ func (t *OnlineTraining) sampleCandidateGroupProbabilities() []filters.PathProba
 	t.mux.Lock()
 	defer t.mux.Unlock()
 
-	// Sample a set of probabilities for use in rules. Order does not matter
-	// as sampled probabilities are independent of paths.
-	probabilities := t.probabilitySampler.Sample(len(t.paths))
+	// Sample a set of probabilities for rules using random optimisation with
+	// a normal distribution, setting the mean to be the current path
+	// probability. The variance is set to 0.5 based on empirical observations.
+	variance := 0.5
+
 	var rules []filters.PathProbabilityRule
-	for i, path := range t.paths {
+	for _, path := range t.paths {
 		rules = append(rules, filters.PathProbabilityRule{
-			Path:        path,
-			Probability: probabilities[i],
+			Path: path,
+			Probability: stats.SampleTruncatedNormalDistribution(
+				0,
+				1,
+				t.candidatePathProbabilities.Get(path),
+				variance,
+			),
 		})
 	}
 
