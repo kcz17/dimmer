@@ -18,6 +18,7 @@ type PIDController struct {
 	lastTick      time.Time // Used to scale differential and integral terms and to enforce minSampleTime.
 	lastInput     float64   // Used to calculate the differential term.
 	integral      float64   // Running integral term for PID calculation.
+	lowPassPole   float64   // TODO(kz)
 	DebugP        float64   // P value calculated during loop, accessible for debug purposes.
 	DebugI        float64   // I value calculated during loop, accessible for debug purposes.
 	DebugD        float64   // D value calculated during loop, accessible for debug purposes.
@@ -43,6 +44,7 @@ func NewPIDController(clock Clock, setpoint float64, kp float64, ki float64, kd 
 		kp:            kp,
 		ki:            ki,
 		kd:            kd,
+		lowPassPole:   0.9,
 		minOutput:     minOutput,
 		maxOutput:     maxOutput,
 		minSampleTime: minSampleTime,
@@ -61,6 +63,9 @@ func (c *PIDController) Output(input float64) float64 {
 			return c.lastOutput
 		}
 	}
+
+	// Smooth the input using the low-pass filter pole.
+	input = c.lowPassPole*c.lastInput + (1-c.lowPassPole)*input
 
 	// Calculate PID terms.
 	errorTerm := c.setpoint - input
