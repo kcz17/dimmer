@@ -25,9 +25,11 @@ type Config struct {
 	// Logging.
 	///////////////////////////////////////////////////////////////////////////
 
-	LoggerDriver        string `env:"LOGGER_DRIVER" env-default:"noop"`
-	LoggerInfluxDBHost  string `env:"LOGGER_INFLUXDB_HOST"`
-	LoggerInfluxDBToken string `env:"LOGGER_INFLUXDB_TOKEN"`
+	LoggerDriver         string `env:"LOGGER_DRIVER" env-default:"noop"`
+	LoggerInfluxDBHost   string `env:"LOGGER_INFLUXDB_HOST"`
+	LoggerInfluxDBToken  string `env:"LOGGER_INFLUXDB_TOKEN"`
+	LoggerInfluxDBOrg    string `env:"LOGGER_INFLUXDB_ORG"`
+	LoggerInfluxDBBucket string `env:"LOGGER_INFLUXDB_BUCKET"`
 
 	///////////////////////////////////////////////////////////////////////////
 	// General dimming.
@@ -121,7 +123,12 @@ func initLogger(config *Config) logging.Logger {
 	} else if config.LoggerDriver == "stdout" {
 		logger = logging.NewStdoutLogger()
 	} else if config.LoggerDriver == "influxdb" {
-		logger = logging.NewInfluxDBLogger(config.LoggerInfluxDBHost, config.LoggerInfluxDBToken)
+		logger = logging.NewInfluxDBLogger(
+			config.LoggerInfluxDBHost,
+			config.LoggerInfluxDBToken,
+			config.LoggerInfluxDBOrg,
+			config.LoggerInfluxDBOrg,
+		)
 	} else {
 		log.Fatalf("expected env var LOGGER_DRIVER one of {noop, stdout, influxdb}; got %s", config.LoggerDriver)
 	}

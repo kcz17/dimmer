@@ -14,13 +14,13 @@ type influxDBLogger struct {
 	asyncWriter api.WriteAPI
 }
 
-func NewInfluxDBLogger(baseURL string, authToken string) *influxDBLogger {
+func NewInfluxDBLogger(baseURL, authToken, org, bucket string) *influxDBLogger {
 	options := influxdb2.DefaultOptions()
 	options.WriteOptions().SetBatchSize(1000)
 	options.WriteOptions().SetFlushInterval(250)
 
 	client := influxdb2.NewClientWithOptions(baseURL, authToken, options)
-	writeAPI := client.WriteAPI("kcz17", "dimmer")
+	writeAPI := client.WriteAPI(org, bucket)
 
 	// Create a goroutine for reading and logging async write errors.
 	errorsCh := writeAPI.Errors()
