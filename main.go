@@ -102,6 +102,8 @@ func main() {
 		log.Fatalf("expected onlineTrainingService to return nil err; got err = %v", err)
 	}
 
+	fmt.Printf("org: %s, bucket: %s", config.ProfilerInfluxDBOrg, config.ProfilerInfluxDBBucket)
+
 	var profiler *profiling.Profiler
 	if config.ProfilerIsEnabled {
 		profiler = &profiling.Profiler{
