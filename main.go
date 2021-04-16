@@ -152,7 +152,7 @@ func initLogger(config *Config) logging.Logger {
 			config.LoggerInfluxDBHost,
 			config.LoggerInfluxDBToken,
 			config.LoggerInfluxDBOrg,
-			config.LoggerInfluxDBOrg,
+			config.LoggerInfluxDBBucket,
 		)
 	} else {
 		log.Fatalf("expected env var LOGGER_DRIVER one of {noop, stdout, influxdb}; got %s", config.LoggerDriver)
