@@ -23,9 +23,9 @@ func NewInfluxDBRequestWriter(addr, authToken, org, bucket string) *InfluxDBRequ
 	options.WriteOptions().SetBatchSize(500)
 	options.WriteOptions().SetFlushInterval(1000)
 
+	fmt.Printf("addr: %s, authToken: %s, org: %s, bucket: %s\n\n\n", addr, authToken, org, bucket)
 	client := influxdb2.NewClientWithOptions(addr, authToken, options)
 	writeAPI := client.WriteAPI(org, bucket)
-	fmt.Printf("addr: %s, authToken: %s, org: %s, bucket: %s\n\n\n", addr, authToken, org, bucket)
 
 	// Create a goroutine for reading and logging async write errors.
 	errorsCh := writeAPI.Errors()
