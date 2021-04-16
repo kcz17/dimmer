@@ -26,7 +26,7 @@ func NewInfluxDBLogger(baseURL, authToken, org, bucket string) *influxDBLogger {
 	errorsCh := writeAPI.Errors()
 	go func() {
 		for err := range errorsCh {
-			fmt.Printf("[%s] influxdb2 async write error: %v\n", time.Now().Format(time.StampMilli), err)
+			fmt.Printf("[%s] influxdb2 logging async write error: %v\n", time.Now().Format(time.StampMilli), err)
 		}
 	}()
 

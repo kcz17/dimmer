@@ -23,7 +23,6 @@ func NewInfluxDBRequestWriter(addr, authToken, org, bucket string) *InfluxDBRequ
 	options.WriteOptions().SetBatchSize(500)
 	options.WriteOptions().SetFlushInterval(1000)
 
-	fmt.Printf("addr: %s, authToken: %s, org: %s, bucket: %s\n\n\n", addr, authToken, org, bucket)
 	client := influxdb2.NewClientWithOptions(addr, authToken, options)
 	writeAPI := client.WriteAPI(org, bucket)
 
@@ -31,7 +30,7 @@ func NewInfluxDBRequestWriter(addr, authToken, org, bucket string) *InfluxDBRequ
 	errorsCh := writeAPI.Errors()
 	go func() {
 		for err := range errorsCh {
-			fmt.Printf("[%s] influxdb2 async write error: %v\n", time.Now().Format(time.StampMilli), err)
+			fmt.Printf("[%s] influxdb2 profiling async write error: %v\n", time.Now().Format(time.StampMilli), err)
 		}
 	}()
 
