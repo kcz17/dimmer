@@ -122,6 +122,7 @@ func main() {
 		OnlineTrainingService:  onlineTrainingService,
 		OfflineTrainingService: offlinetraining.NewOfflineTraining(),
 		ProfilingService:       profiler,
+		IsProfilingEnabled:     config.ProfilerIsEnabled,
 	})
 
 	// Start the server in a goroutine so we can separately block the main

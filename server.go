@@ -35,8 +35,9 @@ type ServerOptions struct {
 	PathProbabilities      *filters.PathProbabilities
 	OnlineTrainingService  *onlinetraining.OnlineTraining
 	OfflineTrainingService *offlinetraining.OfflineTraining
-	IsDimmingEnabled       bool
 	ProfilingService       *profiling.Profiler
+	IsProfilingEnabled     bool
+	IsDimmingEnabled       bool
 }
 
 // Server is a dimming-enhanced server. Dimming is actuated using a control
@@ -70,6 +71,10 @@ type Server struct {
 	// enabled, all paths under RequestFilter will be dimmed according to
 	// PathProbabilities, regardless of the ControlLoop output.
 	offlineTraining *offlinetraining.OfflineTraining
+	// profiling actuates dimming based on user priority, ensuring users have
+	// experience the website with dimming consistent to their profiled priority.
+	profiling          *profiling.Profiler
+	isProfilingEnabled bool
 	// isStarted is checked to ensure each Server is only ever started once.
 	isStarted bool
 	// externalOperationsLock guards external operations which interact with the server.
@@ -110,6 +115,8 @@ func NewServer(options *ServerOptions) *Server {
 		},
 		onlineTraining:         options.OnlineTrainingService,
 		offlineTraining:        options.OfflineTrainingService,
+		profiling:              options.ProfilingService,
+		isProfilingEnabled:     options.IsProfilingEnabled,
 		isStarted:              false,
 		externalOperationsLock: &sync.Mutex{},
 	}
