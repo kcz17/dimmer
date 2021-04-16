@@ -118,6 +118,7 @@ func NewServer(options *ServerOptions) *Server {
 		onlineTraining:         options.OnlineTrainingService,
 		offlineTraining:        options.OfflineTrainingService,
 		profiling:              options.ProfilingService,
+		profilingSessionCookie: options.ProfilingSessionCookie,
 		isProfilingEnabled:     options.IsProfilingEnabled,
 		isStarted:              false,
 		externalOperationsLock: &sync.Mutex{},
