@@ -25,6 +25,7 @@ func NewInfluxDBRequestWriter(addr, authToken, org, bucket string) *InfluxDBRequ
 
 	client := influxdb2.NewClientWithOptions(addr, authToken, options)
 	writeAPI := client.WriteAPI(org, bucket)
+	fmt.Printf("addr: %s, authToken: %s, org: %s, bucket: %s\n\n\n", addr, authToken, org, bucket)
 
 	// Create a goroutine for reading and logging async write errors.
 	errorsCh := writeAPI.Errors()
@@ -41,8 +42,8 @@ func NewInfluxDBRequestWriter(addr, authToken, org, bucket string) *InfluxDBRequ
 }
 
 func (w *InfluxDBRequestWriter) Write(sessionID string, method string, path string) {
-	p := influxdb2.NewPointWithMeasurement("dimmer_response_time").
-		AddField("session_id", sessionID).
+	p := influxdb2.NewPointWithMeasurement("request").
+		AddTag("session_id", sessionID).
 		AddField("method", method).
 		AddField("path", path).
 		SetTime(time.Now())
