@@ -35,8 +35,9 @@ type ServerOptions struct {
 	PathProbabilities      *filters.PathProbabilities
 	OnlineTrainingService  *onlinetraining.OnlineTraining
 	OfflineTrainingService *offlinetraining.OfflineTraining
-	ProfilingService       *profiling.Profiler
 	IsProfilingEnabled     bool
+	ProfilingService       *profiling.Profiler
+	ProfilingSessionCookie string
 	IsDimmingEnabled       bool
 }
 
@@ -70,11 +71,12 @@ type Server struct {
 	// offlineTraining represents the offline training mode. When this mode is
 	// enabled, all paths under RequestFilter will be dimmed according to
 	// PathProbabilities, regardless of the ControlLoop output.
-	offlineTraining *offlinetraining.OfflineTraining
+	offlineTraining    *offlinetraining.OfflineTraining
+	isProfilingEnabled bool
 	// profiling actuates dimming based on user priority, ensuring users have
 	// experience the website with dimming consistent to their profiled priority.
-	profiling          *profiling.Profiler
-	isProfilingEnabled bool
+	profiling              *profiling.Profiler
+	profilingSessionCookie string
 	// isStarted is checked to ensure each Server is only ever started once.
 	isStarted bool
 	// externalOperationsLock guards external operations which interact with the server.
@@ -240,6 +242,11 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 			ctx.Logger().Printf("fasthttp: error when proxying the request: %v", err)
 		}
 		duration := time.Now().Sub(startTime)
+
+		// Profiling: save the request for further profiling.
+		if s.isProfilingEnabled && len(req.Header.Cookie(s.profilingSessionCookie)) != 0 {
+			s.profiling.Requests.Write(string(req.Header.Cookie(s.profilingSessionCookie)), string(ctx.Method()), string(ctx.Path()))
+		}
 
 		// Send the request time to the dimming control loop regardless of
 		// whether dimming is actually enabled, so monitoring tools can capture

@@ -62,6 +62,7 @@ type Config struct {
 	// User profiling.
 	////////////////////////////////////////////////////////////////////////////
 	ProfilerIsEnabled      bool   `env:"PROFILER_ENABLED" env-default:"false"`
+	ProfilerSessionCookie  string `env:"PROFILER_SESSION_COOKIE"`
 	ProfilerInfluxDBHost   string `env:"PROFILER_INFLUXDB_HOST"`
 	ProfilerInfluxDBToken  string `env:"PROFILER_INFLUXDB_TOKEN"`
 	ProfilerInfluxDBOrg    string `env:"PROFILER_INFLUXDB_ORG"`
@@ -121,8 +122,9 @@ func main() {
 		IsDimmingEnabled:       config.IsDimmerEnabled,
 		OnlineTrainingService:  onlineTrainingService,
 		OfflineTrainingService: offlinetraining.NewOfflineTraining(),
-		ProfilingService:       profiler,
 		IsProfilingEnabled:     config.ProfilerIsEnabled,
+		ProfilingService:       profiler,
+		ProfilingSessionCookie: config.ProfilerSessionCookie,
 	})
 
 	// Start the server in a goroutine so we can separately block the main
