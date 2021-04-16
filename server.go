@@ -7,6 +7,7 @@ import (
 	"github.com/kcz17/dimmer/logging"
 	"github.com/kcz17/dimmer/offlinetraining"
 	"github.com/kcz17/dimmer/onlinetraining"
+	"github.com/kcz17/dimmer/profiling"
 	"github.com/valyala/fasthttp"
 	"math/rand"
 	"net/http"
@@ -35,6 +36,7 @@ type ServerOptions struct {
 	OnlineTrainingService  *onlinetraining.OnlineTraining
 	OfflineTrainingService *offlinetraining.OfflineTraining
 	IsDimmingEnabled       bool
+	ProfilingService       *profiling.Profiler
 }
 
 // Server is a dimming-enhanced server. Dimming is actuated using a control

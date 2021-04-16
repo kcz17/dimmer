@@ -8,6 +8,7 @@ import (
 	"github.com/kcz17/dimmer/offlinetraining"
 	"github.com/kcz17/dimmer/onlinetraining"
 	"github.com/kcz17/dimmer/pid"
+	"github.com/kcz17/dimmer/profiling"
 	"github.com/kcz17/dimmer/responsetimecollector"
 	"log"
 )
@@ -56,6 +57,18 @@ type Config struct {
 	// to aggregate response time metrics. It should be smaller than or equal to
 	// the number of expected requests received during the sample period.
 	ResponseTimeCollectorRequestsWindow int `env:"RESPONSE_TIME_COLLECTOR_NUM_REQUESTS_WINDOW"`
+
+	////////////////////////////////////////////////////////////////////////////
+	// User profiling.
+	////////////////////////////////////////////////////////////////////////////
+	ProfilerIsEnabled      bool   `env:"PROFILER_ENABLED" env-default:"false"`
+	ProfilerInfluxDBHost   string `env:"PROFILER_INFLUXDB_HOST"`
+	ProfilerInfluxDBToken  string `env:"PROFILER_INFLUXDB_TOKEN"`
+	ProfilerInfluxDBOrg    string `env:"PROFILER_INFLUXDB_ORG"`
+	ProfilerInfluxDBBucket string `env:"PROFILER_INFLUXDB_BUCKET"`
+	RedisAddr              string `env:"PROFILER_REDIS_ADDR"`
+	RedisPassword          string `env:"PROFILER_REDIS_PASSWORD"`
+	RedisDB                int    `env:"PROFILER_REDIS_DB"`
 }
 
 func main() {
@@ -88,6 +101,14 @@ func main() {
 		log.Fatalf("expected onlineTrainingService to return nil err; got err = %v", err)
 	}
 
+	var profiler *profiling.Profiler
+	if config.ProfilerIsEnabled {
+		profiler = &profiling.Profiler{
+			Priorities: profiling.NewRedisPriorityFetcher(config.RedisAddr, config.RedisPassword, config.RedisDB),
+			Requests:   profiling.NewInfluxDBRequestWriter(config.ProfilerInfluxDBHost, config.ProfilerInfluxDBToken, config.ProfilerInfluxDBOrg, config.ProfilerInfluxDBBucket),
+		}
+	}
+
 	// Serve the reverse proxy with dimming control loop.
 	server := NewServer(&ServerOptions{
 		FrontendAddr:           fmt.Sprintf(":%v", config.FrontEndPort),
@@ -100,6 +121,7 @@ func main() {
 		IsDimmingEnabled:       config.IsDimmerEnabled,
 		OnlineTrainingService:  onlineTrainingService,
 		OfflineTrainingService: offlinetraining.NewOfflineTraining(),
+		ProfilingService:       profiler,
 	})
 
 	// Start the server in a goroutine so we can separately block the main
