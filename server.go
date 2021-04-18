@@ -221,7 +221,9 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 			// of path probabilities.
 			skipPathProbabilities := false
 
-			if s.isProfilingEnabled && s.dimmingMode == DimmingWithProfiling {
+			// Profiling should only occur when the session cookie is set.
+			if s.isProfilingEnabled && s.dimmingMode == DimmingWithProfiling &&
+				len(req.Header.Cookie(s.profilingSessionCookie)) != 0 {
 				if profiling.HasDimmingDecisionCookie(req) {
 					// If the session is dimmed as a result of its priority, we
 					// override the dimmer to always dim optional components.
@@ -300,7 +302,8 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 
 		// If profiling is enabled, save the request for further profiling and
 		// set appropriate profiling cookies if none exist.
-		if s.isProfilingEnabled && s.dimmingMode == DimmingWithProfiling {
+		if s.isProfilingEnabled && s.dimmingMode == DimmingWithProfiling &&
+			len(req.Header.Cookie(s.profilingSessionCookie)) != 0 {
 			s.profiling.Requests.Write(string(req.Header.Cookie(s.profilingSessionCookie)), string(ctx.Method()), string(ctx.Path()))
 
 			// Fetch the session's priority if it does not have a priority set.
