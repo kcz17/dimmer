@@ -43,7 +43,10 @@ func CookieForPriority(priority Priority) *fasthttp.Cookie {
 		cookie.SetValue(priorityLowValue)
 	} else if priority == High {
 		cookie.SetValue(priorityHighValue)
+	} else if priority == Unknown {
+		cookie.SetValue(priorityUnknownValue)
 	} else {
+		log.Printf("unexpected priority cookie value during CookieForPriority(); priority = %d", priority)
 		cookie.SetValue(priorityUnknownValue)
 	}
 
