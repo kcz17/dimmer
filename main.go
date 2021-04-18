@@ -69,7 +69,8 @@ type Config struct {
 	ProfilerInfluxDBBucket string `env:"PROFILER_INFLUXDB_BUCKET"`
 	RedisAddr              string `env:"PROFILER_REDIS_ADDR"`
 	RedisPassword          string `env:"PROFILER_REDIS_PASSWORD"`
-	RedisDB                int    `env:"PROFILER_REDIS_DB"`
+	RedisPrioritiesDB      int    `env:"PROFILER_REDIS_PRIORITIES_DB"`
+	RedisQueueDB           int    `env:"PROFILER_REDIS_QUEUE_DB"`
 }
 
 func main() {
@@ -104,8 +105,13 @@ func main() {
 
 	var profiler *profiling.Profiler
 	if config.ProfilerIsEnabled {
+		priorityFetcher, err := profiling.NewRedisPriorityFetcher(config.RedisAddr, config.RedisPassword, config.RedisPrioritiesDB, config.RedisQueueDB)
+		if err != nil {
+			panic(fmt.Errorf("could not create RedisPriorityFetcher: %w", err))
+		}
+
 		profiler = &profiling.Profiler{
-			Priorities: profiling.NewRedisPriorityFetcher(config.RedisAddr, config.RedisPassword, config.RedisDB),
+			Priorities: priorityFetcher,
 			Requests:   profiling.NewInfluxDBRequestWriter(config.ProfilerInfluxDBHost, config.ProfilerInfluxDBToken, config.ProfilerInfluxDBOrg, config.ProfilerInfluxDBBucket),
 		}
 	}

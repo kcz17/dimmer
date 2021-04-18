@@ -53,8 +53,11 @@ func (s *APIServer) setServerModeHandler() routing.Handler {
 		case "DimmingWithOnlineTraining":
 			err = s.Server.SetDimmingMode(DimmingWithOnlineTraining)
 			break
+		case "DimmingWithProfiling":
+			err = s.Server.SetDimmingMode(DimmingWithProfiling)
+			break
 		default:
-			err = errors.New("mode must be one of {Default|Disabled|OfflineTraining|Dimming|DimmingWithOnlineTraining}")
+			err = errors.New("mode must be one of {Default|Disabled|OfflineTraining|Dimming|DimmingWithOnlineTraining|DimmingWithProfiling}")
 			break
 		}
 		if err != nil {

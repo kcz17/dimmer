@@ -3,7 +3,8 @@ module github.com/kcz17/dimmer
 go 1.15
 
 require (
-	github.com/go-redis/redis/v8 v8.8.2
+	github.com/adjust/rmq/v3 v3.0.0
+	github.com/go-redis/redis/v7 v7.2.0
 	github.com/ilyakaznacheev/cleanenv v1.2.5
 	github.com/influxdata/influxdb-client-go/v2 v2.2.2
 	github.com/jackwhelpton/fasthttp-routing/v2 v2.0.0

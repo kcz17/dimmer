@@ -9,6 +9,7 @@ import (
 	"github.com/kcz17/dimmer/onlinetraining"
 	"github.com/kcz17/dimmer/profiling"
 	"github.com/valyala/fasthttp"
+	"log"
 	"math/rand"
 	"net/http"
 	"strings"
@@ -22,6 +23,7 @@ const (
 	Disabled DimmingMode = iota
 	OfflineTraining
 	Dimming
+	DimmingWithProfiling
 	DimmingWithOnlineTraining
 )
 
@@ -207,23 +209,54 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 		isDimmingEnabled := s.dimmingMode != Disabled
 		isDimmableRequest := s.dimming.RequestFilter.Matches(string(ctx.Path()), string(ctx.Method()), string(req.Header.Referer()))
 		if isDimmingEnabled && isDimmableRequest {
-			// If offline training is enabled, we always dim. We use a nested
-			// conditional to reduce the mutex overhead of reading the dimming
-			// percentage.
+			// If offline training is enabled, we always dim. shouldDim is
+			// nested inside an if statement instead of being top-level to
+			// eliminate the mutex overhead of reading the dimming percentage if
+			// the request is not dimmable.
 			shouldDim := s.dimmingMode == OfflineTraining ||
 				rand.Float64()*100 < s.dimming.ControlLoop.readDimmingPercentage()
 
-			// Ensure dimming is weighted according to path probabilities. Path
-			// probabilities are chosen according to whether the request is an
-			// online training candidate or not.
-			shouldUseOnlineTrainingCandidateGroupProbabilities :=
-				s.dimmingMode == DimmingWithOnlineTraining &&
-					onlinetraining.RequestHasCandidateCookie(req)
+			// Profiled sessions which are dimmed as a result of their priority
+			// will have all optional components uniformly dimmed irrespective
+			// of path probabilities.
+			skipPathProbabilities := false
 
-			if shouldUseOnlineTrainingCandidateGroupProbabilities {
-				shouldDim = shouldDim && s.onlineTraining.SampleCandidateGroupShouldDim(string(ctx.Path()))
-			} else {
-				shouldDim = shouldDim && s.dimming.PathProbabilities.SampleShouldDim(string(ctx.Path()))
+			if s.isProfilingEnabled && s.dimmingMode == DimmingWithProfiling {
+				if profiling.HasDimmingDecisionCookie(req) {
+					// If the session is dimmed as a result of its priority, we
+					// override the dimmer to always dim optional components.
+					skipPathProbabilities = true
+					shouldDim = profiling.ReadDimmingDecisionCookie(req)
+				} else if profiling.RequestHasPriorityCookie(req) {
+					// Sample a long-term dimming decision as the session has a
+					// priority profiled but its dimming decision has not been
+					// made. We use the existing shouldDim variable for this
+					// decision as it is declared above by sampling against the
+					// current PID output.
+					dimmingDecision := shouldDim && profiling.SampleDimmingForPriorityCookie(req)
+
+					// Actuate the dimming decision for the current request.
+					skipPathProbabilities = dimmingDecision
+					shouldDim = shouldDim || dimmingDecision
+
+					// Persist the dimming decision.
+					resp.Header.SetCookie(profiling.CookieForDimmingDecision(dimmingDecision))
+				}
+			}
+
+			if !skipPathProbabilities {
+				// Ensure dimming is weighted according to path probabilities. Path
+				// probabilities are chosen according to whether the request is an
+				// online training candidate or not.
+				shouldUseOnlineTrainingCandidateGroupProbabilities :=
+					s.dimmingMode == DimmingWithOnlineTraining &&
+						onlinetraining.RequestHasCandidateCookie(req)
+
+				if shouldUseOnlineTrainingCandidateGroupProbabilities {
+					shouldDim = shouldDim && s.onlineTraining.SampleCandidateGroupShouldDim(string(ctx.Path()))
+				} else {
+					shouldDim = shouldDim && s.dimming.PathProbabilities.SampleShouldDim(string(ctx.Path()))
+				}
 			}
 
 			if shouldDim {
@@ -244,11 +277,6 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 		}
 		duration := time.Now().Sub(startTime)
 
-		// Profiling: save the request for further profiling.
-		if s.isProfilingEnabled && len(req.Header.Cookie(s.profilingSessionCookie)) != 0 {
-			s.profiling.Requests.Write(string(req.Header.Cookie(s.profilingSessionCookie)), string(ctx.Method()), string(ctx.Path()))
-		}
-
 		// Send the request time to the dimming control loop regardless of
 		// whether dimming is actually enabled, so monitoring tools can capture
 		// what the dimmer would do if enabled. Static .html files are excluded
@@ -266,6 +294,29 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 					s.onlineTraining.AddCandidateResponseTime(duration)
 				} else {
 					s.onlineTraining.AddControlResponseTime(duration)
+				}
+			}
+		}
+
+		// If profiling is enabled, save the request for further profiling and
+		// set appropriate profiling cookies if none exist.
+		if s.isProfilingEnabled && s.dimmingMode == DimmingWithProfiling {
+			s.profiling.Requests.Write(string(req.Header.Cookie(s.profilingSessionCookie)), string(ctx.Method()), string(ctx.Path()))
+
+			// Fetch the session's priority if it does not have a priority set.
+			if !profiling.RequestHasUnknownCookie(req) {
+				sessionID := string(req.Header.Cookie(s.profilingSessionCookie))
+				priority, err := s.profiling.Priorities.Fetch(sessionID)
+				if err != nil {
+					log.Printf("could not fetch priority for sessionID = %s due to err %s", sessionID, err)
+				} else {
+					resp.Header.SetCookie(profiling.CookieForPriority(priority))
+
+					// Profiler implementations may require a push to an external
+					// service profile unknown sessions.
+					if priority == profiling.Unknown {
+						s.profiling.Priorities.Profile(sessionID)
+					}
 				}
 			}
 		}
