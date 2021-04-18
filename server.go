@@ -204,8 +204,15 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 		req := &ctx.Request
 		resp := &ctx.Response
 
-		// Remove connection header from response per RFC2616.
+		// Remove connection header per RFC2616.
+		req.Header.Del("Connection")
 		resp.Header.Del("Connection")
+
+		// preResponseHook guarantees that modifications to the response within
+		// the hook will not be reset prior to the response returning. This is
+		// used as header modifications (e.g., setting dimming decision cookies)
+		// made before proxying will be reset during proxying.
+		var preResponseHook func()
 
 		// If dimming or training mode is enabled, enforce dimming on dimmable
 		// components by returning a HTTP error page if a probability is met.
@@ -244,7 +251,9 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 					// for the current request even if the dimming decision is
 					// true, as the response headers would otherwise be reset by
 					// the ctx.Error call below.
-					resp.Header.SetCookie(profiling.CookieForDimmingDecision(dimmingDecision))
+					preResponseHook = func() {
+						resp.Header.SetCookie(profiling.CookieForDimmingDecision(dimmingDecision))
+					}
 
 					// Actuate the dimming decision for the current request.
 					skipPathProbabilities = dimmingDecision
@@ -268,16 +277,14 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 			}
 
 			if shouldDim {
+				if preResponseHook != nil {
+					preResponseHook()
+				}
 				ctx.SetStatusCode(http.StatusTooManyRequests)
 				ctx.SetBodyString("Dimming!")
 				return
 			}
 		}
-
-		func(req *fasthttp.Request) {
-			// Remove connection header per RFC2616.
-			req.Header.Del("Connection")
-		}(req)
 
 		// Proxy the request, capturing the request time.
 		startTime := time.Now()
@@ -285,6 +292,10 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 			ctx.Logger().Printf("fasthttp: error when proxying the request: %v", err)
 		}
 		duration := time.Now().Sub(startTime)
+
+		if preResponseHook != nil {
+			preResponseHook()
+		}
 
 		// Send the request time to the dimming control loop regardless of
 		// whether dimming is actually enabled, so monitoring tools can capture

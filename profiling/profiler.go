@@ -15,8 +15,8 @@ const cookieUnknownDefaultExpiry = 2 * time.Minute
 const cookiePriorityDefaultExpiry = 2 * time.Hour
 
 const dimmingDecisionKey = "DIMMING_DECISION"
-const dimmingDecisionTrueValue = "1"
-const dimmingDecisionFalseValue = "0"
+const dimmingDecisionTrueValue = "true"
+const dimmingDecisionFalseValue = "false"
 const cookieDimmingDefaultExpiry = 1 * time.Minute
 
 const lowPriorityDimmingProbability = 0.9
