@@ -315,7 +315,6 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 					// Profiler implementations may require a push to an external
 					// service profile unknown sessions.
 					if priority == profiling.Unknown {
-						log.Printf("profiling!")
 						s.profiling.Priorities.Profile(sessionID)
 					}
 				}
