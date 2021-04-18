@@ -237,11 +237,10 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 					// current PID output.
 					dimmingDecision := shouldDim && profiling.SampleDimmingForPriorityCookie(req)
 
-					// Actuate the dimming decision for the current request.
-					skipPathProbabilities = dimmingDecision
-					shouldDim = shouldDim || dimmingDecision
-
-					// Persist the dimming decision.
+					// Persist the dimming decision. We do not actuate dimming
+					// for the current request even if the dimming decision is
+					// true, as the response headers would otherwise be reset by
+					// the ctx.Error call below.
 					resp.Header.SetCookie(profiling.CookieForDimmingDecision(dimmingDecision))
 				}
 			}
