@@ -204,6 +204,9 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 		req := &ctx.Request
 		resp := &ctx.Response
 
+		// Remove connection header from response per RFC2616.
+		resp.Header.Del("Connection")
+
 		// If dimming or training mode is enabled, enforce dimming on dimmable
 		// components by returning a HTTP error page if a probability is met.
 		isDimmingEnabled := s.dimmingMode != Disabled
@@ -224,8 +227,6 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 			// Profiling should only occur when the session cookie is set.
 			if s.isProfilingEnabled && s.dimmingMode == DimmingWithProfiling &&
 				len(req.Header.Cookie(s.profilingSessionCookie)) != 0 {
-				log.Printf("profiling.RequestHasPriorityCookie(req) = %v", profiling.RequestHasPriorityCookie(req))
-
 				if profiling.HasDimmingDecisionCookie(req) {
 					// If the session is dimmed as a result of its priority, we
 					// override the dimmer to always dim optional components.
@@ -244,6 +245,10 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 					// true, as the response headers would otherwise be reset by
 					// the ctx.Error call below.
 					resp.Header.SetCookie(profiling.CookieForDimmingDecision(dimmingDecision))
+
+					// Actuate the dimming decision for the current request.
+					skipPathProbabilities = dimmingDecision
+					shouldDim = shouldDim || dimmingDecision
 				}
 			}
 
@@ -263,7 +268,8 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 			}
 
 			if shouldDim {
-				ctx.Error("dimming", http.StatusTooManyRequests)
+				ctx.SetStatusCode(http.StatusTooManyRequests)
+				ctx.SetBodyString("Dimming!")
 				return
 			}
 		}
@@ -335,10 +341,5 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 			!onlinetraining.RequestHasCookie(req) {
 			resp.Header.SetCookie(onlinetraining.SampleCookie())
 		}
-
-		func(resp *fasthttp.Response) {
-			// Remove connection header per RFC2616.
-			resp.Header.Del("Connection")
-		}(resp)
 	}
 }
