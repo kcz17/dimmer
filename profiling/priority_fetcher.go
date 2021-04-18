@@ -5,7 +5,6 @@ import (
 	"github.com/adjust/rmq/v3"
 	"github.com/go-redis/redis/v7"
 	"log"
-	"strconv"
 )
 
 type PriorityFetcher interface {
@@ -62,14 +61,10 @@ func (f *RedisPriorityFetcher) Fetch(sessionID string) (Priority, error) {
 		return Unknown, fmt.Errorf("expected rdb.Get(%s) returns nil err; got err = %w", sessionID, err)
 	}
 
-	intVal, err := strconv.Atoi(val)
+	priority, err := strToPriority(val)
 	if err != nil {
 		return Unknown, fmt.Errorf("expected strconv.Atoi(%s) returns nil err; got err = %w", val, err)
 	}
 
-	if Priority(intVal) != Unknown && intVal != Low && intVal != High {
-		return Unknown, fmt.Errorf("encountered invalid priority int value: %d", intVal)
-	}
-
-	return Priority(intVal), nil
+	return priority, nil
 }
