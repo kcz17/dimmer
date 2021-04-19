@@ -28,12 +28,12 @@ type Profiler struct {
 }
 
 func RequestHasPriorityCookie(request *fasthttp.Request) bool {
-	return string(request.Header.Cookie(priorityKey)) == priorityLowValue ||
-		string(request.Header.Cookie(priorityKey)) == priorityHighValue
+	return len(string(request.Header.Cookie(priorityKey))) != 0
 }
 
-func RequestHasUnknownCookie(request *fasthttp.Request) bool {
-	return string(request.Header.Cookie(priorityKey)) == priorityUnknownValue
+func RequestHasPriorityLowOrHighCookie(request *fasthttp.Request) bool {
+	return string(request.Header.Cookie(priorityKey)) == priorityLowValue ||
+		string(request.Header.Cookie(priorityKey)) == priorityHighValue
 }
 
 func CookieForPriority(priority Priority) *fasthttp.Cookie {

@@ -239,7 +239,7 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 					// override the dimmer to always dim optional components.
 					skipPathProbabilities = true
 					shouldDim = profiling.ReadDimmingDecisionCookie(req)
-				} else if profiling.RequestHasPriorityCookie(req) {
+				} else if profiling.RequestHasPriorityLowOrHighCookie(req) {
 					// Sample a long-term dimming decision as the session has a
 					// priority profiled but its dimming decision has not been
 					// made. We use the existing shouldDim variable for this
@@ -325,7 +325,7 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 			s.profiling.Requests.Write(string(req.Header.Cookie(s.profilingSessionCookie)), string(ctx.Method()), string(ctx.Path()))
 
 			// Fetch the session's priority if it does not have a priority set.
-			if !profiling.RequestHasUnknownCookie(req) &&
+			if !profiling.RequestHasPriorityCookie(req) &&
 				strings.Contains(string(ctx.Path()), ".html") {
 				sessionID := string(req.Header.Cookie(s.profilingSessionCookie))
 				priority, err := s.profiling.Priorities.Fetch(sessionID)
