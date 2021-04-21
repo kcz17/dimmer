@@ -3,7 +3,6 @@ package profiling
 import (
 	"github.com/valyala/fasthttp"
 	"log"
-	"math/rand"
 	"time"
 )
 
@@ -19,8 +18,8 @@ const dimmingDecisionTrueValue = "true"
 const dimmingDecisionFalseValue = "false"
 const cookieDimmingDefaultExpiry = 1 * time.Minute
 
-const lowPriorityDimmingProbability = 0.9
-const highPriorityDimmingProbability = 0.1
+const lowPriorityDimmingProbability = 2
+const highPriorityDimmingProbability = 0.05
 
 type Profiler struct {
 	Priorities PriorityFetcher
@@ -59,14 +58,14 @@ func CookieForPriority(priority Priority) *fasthttp.Cookie {
 	return cookie
 }
 
-func SampleDimmingForPriorityCookie(request *fasthttp.Request) bool {
+func DimmingDecisionProbabilityForPriorityCookie(request *fasthttp.Request) float64 {
 	if string(request.Header.Cookie(priorityKey)) == priorityLowValue {
-		return rand.Float64() < lowPriorityDimmingProbability
+		return lowPriorityDimmingProbability
 	} else if string(request.Header.Cookie(priorityKey)) == priorityHighValue {
-		return rand.Float64() < highPriorityDimmingProbability
+		return highPriorityDimmingProbability
 	} else {
 		log.Printf("unexpected priority cookie value during SampleDimmingForPriorityCookie: %s", string(request.Header.Cookie(priorityKey)))
-		return false
+		return 0
 	}
 }
 

@@ -242,10 +242,11 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 				} else if profiling.RequestHasPriorityLowOrHighCookie(req) {
 					// Sample a long-term dimming decision as the session has a
 					// priority profiled but its dimming decision has not been
-					// made. We use the existing shouldDim variable for this
-					// decision as it is declared above by sampling against the
-					// current PID output.
-					dimmingDecision := shouldDim && profiling.SampleDimmingForPriorityCookie(req)
+					// made. We use the current PID output to achieve
+					// responsiveness to changes in PID output, even if not
+					// instant due to the cookie expiry time.
+					dimmingDecision := rand.Float64()*100 < s.dimming.ControlLoop.readDimmingPercentage()*
+						profiling.DimmingDecisionProbabilityForPriorityCookie(req)
 
 					// Persist the dimming decision. We do not actuate dimming
 					// for the current request even if the dimming decision is
