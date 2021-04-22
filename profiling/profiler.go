@@ -79,9 +79,9 @@ func (p *Profiler) DimmingDecisionProbabilityForPriorityCookie(request *fasthttp
 	// Occurrences are incremented by one to prevent divide-by-zero errors later.
 	expectation := lowPriorityDimmingProbability*(numLow+1) + highPriorityDimmingProbability*(numHigh+1)
 	if string(request.Header.Cookie(priorityKey)) == priorityLowValue {
-		return numLow * (numLow / expectation)
+		return lowPriorityDimmingProbability * (numLow / expectation)
 	} else if string(request.Header.Cookie(priorityKey)) == priorityHighValue {
-		return numHigh * (numHigh / expectation)
+		return highPriorityDimmingProbability * (numHigh / expectation)
 	} else {
 		log.Printf("unexpected priority cookie value during SampleDimmingForPriorityCookie: %s", string(request.Header.Cookie(priorityKey)))
 		return 0
