@@ -113,6 +113,7 @@ func main() {
 		profiler = &profiling.Profiler{
 			Priorities: priorityFetcher,
 			Requests:   profiling.NewInfluxDBRequestWriter(config.ProfilerInfluxDBHost, config.ProfilerInfluxDBToken, config.ProfilerInfluxDBOrg, config.ProfilerInfluxDBBucket),
+			Aggregator: profiling.NewProfiledRequestAggregator(),
 		}
 	}
 

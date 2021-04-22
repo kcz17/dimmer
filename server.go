@@ -214,6 +214,16 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 		// made before proxying will be reset during proxying.
 		var preResponseHook func()
 
+		// To actuate the PID output correctly during dimming, the proportion
+		// between low priority and high priority requests should be captured.
+		// This will ensure, for example, that high priority requests are dimmed
+		// when there are no low priority requests to dim.
+		if s.isProfilingEnabled && s.dimmingMode == DimmingWithProfiling &&
+			profiling.RequestHasPriorityLowOrHighCookie(req) &&
+			strings.Contains(string(ctx.Path()), ".html") {
+			s.profiling.MarkProfiledRequestByPriorityCookie(req)
+		}
+
 		// If dimming or training mode is enabled, enforce dimming on dimmable
 		// components by returning a HTTP error page if a probability is met.
 		isDimmingEnabled := s.dimmingMode != Disabled
@@ -246,7 +256,7 @@ func (s *Server) requestHandler() fasthttp.RequestHandler {
 					// responsiveness to changes in PID output, even if not
 					// instant due to the cookie expiry time.
 					dimmingDecision := rand.Float64()*100 < s.dimming.ControlLoop.readDimmingPercentage()*
-						profiling.DimmingDecisionProbabilityForPriorityCookie(req)
+						s.profiling.DimmingDecisionProbabilityForPriorityCookie(req)
 
 					// Persist the dimming decision. We do not actuate dimming
 					// for the current request even if the dimming decision is
