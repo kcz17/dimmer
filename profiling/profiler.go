@@ -18,14 +18,14 @@ const dimmingDecisionTrueValue = "true"
 const dimmingDecisionFalseValue = "false"
 const cookieDimmingDefaultExpiry = 1 * time.Minute
 
-// Probabilities must add up to one.
-const lowPriorityDimmingProbability = 0.99
-const highPriorityDimmingProbability = 0.01
-
 type Profiler struct {
-	Priorities PriorityFetcher
-	Requests   RequestWriter
-	Aggregator *ProfiledRequestAggregator
+	Priorities                               PriorityFetcher
+	Requests                                 RequestWriter
+	Aggregator                               *ProfiledRequestAggregator
+	LowPriorityDimmingProbability            float64
+	LowPriorityDimmingProbabilityMultiplier  float64
+	HighPriorityDimmingProbability           float64
+	HighPriorityDimmingProbabilityMultiplier float64
 }
 
 func RequestHasPriorityCookie(request *fasthttp.Request) bool {
@@ -77,11 +77,11 @@ func (p *Profiler) DimmingDecisionProbabilityForPriorityCookie(request *fasthttp
 	numHigh := float64(p.Aggregator.GetHighPriorityVisits())
 
 	// Occurrences are incremented by one to prevent divide-by-zero errors later.
-	expectation := lowPriorityDimmingProbability*(numLow+1) + highPriorityDimmingProbability*(numHigh+1)
+	expectation := p.LowPriorityDimmingProbability*(numLow+1) + p.HighPriorityDimmingProbability*(numHigh+1)
 	if string(request.Header.Cookie(priorityKey)) == priorityLowValue {
-		return lowPriorityDimmingProbability * (numLow / expectation)
+		return p.LowPriorityDimmingProbabilityMultiplier * p.LowPriorityDimmingProbability * (numLow / expectation)
 	} else if string(request.Header.Cookie(priorityKey)) == priorityHighValue {
-		return highPriorityDimmingProbability * (numHigh / expectation)
+		return p.HighPriorityDimmingProbabilityMultiplier * p.HighPriorityDimmingProbability * (numHigh / expectation)
 	} else {
 		log.Printf("unexpected priority cookie value during SampleDimmingForPriorityCookie: %s", string(request.Header.Cookie(priorityKey)))
 		return 0

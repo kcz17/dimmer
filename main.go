@@ -61,16 +61,20 @@ type Config struct {
 	////////////////////////////////////////////////////////////////////////////
 	// User profiling.
 	////////////////////////////////////////////////////////////////////////////
-	ProfilerIsEnabled      bool   `env:"PROFILER_ENABLED" env-default:"false"`
-	ProfilerSessionCookie  string `env:"PROFILER_SESSION_COOKIE"`
-	ProfilerInfluxDBHost   string `env:"PROFILER_INFLUXDB_HOST"`
-	ProfilerInfluxDBToken  string `env:"PROFILER_INFLUXDB_TOKEN"`
-	ProfilerInfluxDBOrg    string `env:"PROFILER_INFLUXDB_ORG"`
-	ProfilerInfluxDBBucket string `env:"PROFILER_INFLUXDB_BUCKET"`
-	RedisAddr              string `env:"PROFILER_REDIS_ADDR"`
-	RedisPassword          string `env:"PROFILER_REDIS_PASSWORD"`
-	RedisPrioritiesDB      int    `env:"PROFILER_REDIS_PRIORITIES_DB"`
-	RedisQueueDB           int    `env:"PROFILER_REDIS_QUEUE_DB"`
+	ProfilerIsEnabled                        bool    `env:"PROFILER_ENABLED" env-default:"false"`
+	ProfilerSessionCookie                    string  `env:"PROFILER_SESSION_COOKIE"`
+	ProfilerInfluxDBHost                     string  `env:"PROFILER_INFLUXDB_HOST"`
+	ProfilerInfluxDBToken                    string  `env:"PROFILER_INFLUXDB_TOKEN"`
+	ProfilerInfluxDBOrg                      string  `env:"PROFILER_INFLUXDB_ORG"`
+	ProfilerInfluxDBBucket                   string  `env:"PROFILER_INFLUXDB_BUCKET"`
+	RedisAddr                                string  `env:"PROFILER_REDIS_ADDR"`
+	RedisPassword                            string  `env:"PROFILER_REDIS_PASSWORD"`
+	RedisPrioritiesDB                        int     `env:"PROFILER_REDIS_PRIORITIES_DB"`
+	RedisQueueDB                             int     `env:"PROFILER_REDIS_QUEUE_DB"`
+	ProfilerDimmingProbabilityHigh           float64 `env:"PROFILER_DIMMING_PROBABILITY_HIGH" env-default:"0.99"`
+	ProfilerDimmingProbabilityHighMultiplier float64 `env:"PROFILER_DIMMING_PROBABILITY_HIGH_MULTIPLIER" env-default:"1"`
+	ProfilerDimmingProbabilityLow            float64 `env:"PROFILER_DIMMING_PROBABILITY_LOW" env-default:"0.99"`
+	ProfilerDimmingProbabilityLowMultiplier  float64 `env:"PROFILER_DIMMING_PROBABILITY_LOW_MULTIPLIER" env-default:"1"`
 }
 
 func main() {
@@ -111,9 +115,13 @@ func main() {
 		}
 
 		profiler = &profiling.Profiler{
-			Priorities: priorityFetcher,
-			Requests:   profiling.NewInfluxDBRequestWriter(config.ProfilerInfluxDBHost, config.ProfilerInfluxDBToken, config.ProfilerInfluxDBOrg, config.ProfilerInfluxDBBucket),
-			Aggregator: profiling.NewProfiledRequestAggregator(),
+			Priorities:                               priorityFetcher,
+			Requests:                                 profiling.NewInfluxDBRequestWriter(config.ProfilerInfluxDBHost, config.ProfilerInfluxDBToken, config.ProfilerInfluxDBOrg, config.ProfilerInfluxDBBucket),
+			Aggregator:                               profiling.NewProfiledRequestAggregator(),
+			LowPriorityDimmingProbability:            config.ProfilerDimmingProbabilityLow,
+			LowPriorityDimmingProbabilityMultiplier:  config.ProfilerDimmingProbabilityLowMultiplier,
+			HighPriorityDimmingProbability:           config.ProfilerDimmingProbabilityHigh,
+			HighPriorityDimmingProbabilityMultiplier: config.ProfilerDimmingProbabilityHighMultiplier,
 		}
 	}
 
