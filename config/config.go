@@ -77,10 +77,10 @@ type Profiler struct {
 }
 
 type Redis struct {
-	Addr         string `mapstructure:"" validate:"required"`
-	Password     string `mapstructure:"" validate:"required"`
-	PrioritiesDB int    `mapstructure:"" validate:"required"`
-	QueueDB      int    `mapstructure:"" validate:"required"`
+	Addr         string `mapstructure:"addr" validate:"required"`
+	Password     string `mapstructure:"password" validate:"required"`
+	PrioritiesDB int    `mapstructure:"prioritiesDB" validate:"required"`
+	QueueDB      int    `mapstructure:"queueDB" validate:"required"`
 }
 
 type Probabilities struct {
