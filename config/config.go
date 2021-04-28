@@ -112,6 +112,8 @@ func setDefaults() {
 }
 
 func ReadConfig() *Config {
+	// Dots are not valid identifiers for environment variables.
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
 	setDefaults()
 
