@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/ilyakaznacheev/cleanenv"
+	"github.com/kcz17/dimmer/config"
 	"github.com/kcz17/dimmer/filters"
 	"github.com/kcz17/dimmer/logging"
 	"github.com/kcz17/dimmer/offlinetraining"
@@ -11,85 +11,26 @@ import (
 	"github.com/kcz17/dimmer/profiling"
 	"github.com/kcz17/dimmer/responsetimecollector"
 	"log"
+	"strconv"
 )
 
-type Config struct {
-	///////////////////////////////////////////////////////////////////////////
-	// Proxying and serving.
-	///////////////////////////////////////////////////////////////////////////
-
-	FrontEndPort string `env:"FE_PORT"`
-	BackEndHost  string `env:"BE_HOST" env-default:"localhost"`
-	BackEndPort  string `env:"BE_PORT"`
-
-	///////////////////////////////////////////////////////////////////////////
-	// Logging.
-	///////////////////////////////////////////////////////////////////////////
-
-	LoggerDriver         string `env:"LOGGER_DRIVER" env-default:"noop"`
-	LoggerInfluxDBHost   string `env:"LOGGER_INFLUXDB_HOST"`
-	LoggerInfluxDBToken  string `env:"LOGGER_INFLUXDB_TOKEN"`
-	LoggerInfluxDBOrg    string `env:"LOGGER_INFLUXDB_ORG"`
-	LoggerInfluxDBBucket string `env:"LOGGER_INFLUXDB_BUCKET"`
-
-	///////////////////////////////////////////////////////////////////////////
-	// General dimming.
-	///////////////////////////////////////////////////////////////////////////
-
-	IsDimmerEnabled bool `env:"DIMMER_ENABLED" env-default:"true"`
-
-	///////////////////////////////////////////////////////////////////////////
-	// Dimming PID controller.
-	///////////////////////////////////////////////////////////////////////////
-
-	ControllerSamplePeriod float64 `env:"CONTROLLER_SAMPLE_PERIOD"`
-	ControllerPercentile   string  `env:"CONTROLLER_PERCENTILE" env-default:"p95"`
-	ControllerSetpoint     float64 `env:"CONTROLLER_SETPOINT"`
-	ControllerKp           float64 `env:"CONTROLLER_KP"`
-	ControllerKi           float64 `env:"CONTROLLER_KI"`
-	ControllerKd           float64 `env:"CONTROLLER_KD"`
-
-	///////////////////////////////////////////////////////////////////////////
-	// Response time data collection.
-	///////////////////////////////////////////////////////////////////////////
-
-	// ResponseTimeCollectorRequestsWindow defines the number of requests used
-	// to aggregate response time metrics. It should be smaller than or equal to
-	// the number of expected requests received during the sample period.
-	ResponseTimeCollectorRequestsWindow int `env:"RESPONSE_TIME_COLLECTOR_NUM_REQUESTS_WINDOW"`
-
-	////////////////////////////////////////////////////////////////////////////
-	// User profiling.
-	////////////////////////////////////////////////////////////////////////////
-	ProfilerIsEnabled                        bool    `env:"PROFILER_ENABLED" env-default:"false"`
-	ProfilerSessionCookie                    string  `env:"PROFILER_SESSION_COOKIE"`
-	ProfilerInfluxDBHost                     string  `env:"PROFILER_INFLUXDB_HOST"`
-	ProfilerInfluxDBToken                    string  `env:"PROFILER_INFLUXDB_TOKEN"`
-	ProfilerInfluxDBOrg                      string  `env:"PROFILER_INFLUXDB_ORG"`
-	ProfilerInfluxDBBucket                   string  `env:"PROFILER_INFLUXDB_BUCKET"`
-	RedisAddr                                string  `env:"PROFILER_REDIS_ADDR"`
-	RedisPassword                            string  `env:"PROFILER_REDIS_PASSWORD"`
-	RedisPrioritiesDB                        int     `env:"PROFILER_REDIS_PRIORITIES_DB"`
-	RedisQueueDB                             int     `env:"PROFILER_REDIS_QUEUE_DB"`
-	ProfilerDimmingProbabilityHigh           float64 `env:"PROFILER_DIMMING_PROBABILITY_HIGH" env-default:"0.99"`
-	ProfilerDimmingProbabilityHighMultiplier float64 `env:"PROFILER_DIMMING_PROBABILITY_HIGH_MULTIPLIER" env-default:"1"`
-	ProfilerDimmingProbabilityLow            float64 `env:"PROFILER_DIMMING_PROBABILITY_LOW" env-default:"0.99"`
-	ProfilerDimmingProbabilityLowMultiplier  float64 `env:"PROFILER_DIMMING_PROBABILITY_LOW_MULTIPLIER" env-default:"1"`
-}
+// ResponseTimeCollectorRequestsWindow defines the number of requests from which
+// the aggregate response time will be calculated for the PID control loop. As
+// the control loop runs every second by default, this is set to 100, hence
+// requiring a minimum of 100rps for non-negligible response times to be passed
+// to the PID controller. This is justifiable as web servers tend to encounter
+// load above 100rps.
+const ResponseTimeCollectorRequestsWindow = 100
 
 func main() {
-	var config Config
-	err := cleanenv.ReadEnv(&config)
-	if err != nil {
-		log.Fatalf("expected err == nil in envconfig.Process(); got err = %v", err)
-	}
+	conf := config.ReadConfig()
 
-	logger := initLogger(&config)
+	logger := initLogger(conf)
 
 	controlLoop := initControlLoop(
-		&config,
-		initPIDController(&config),
-		responsetimecollector.NewTachymeterCollector(config.ResponseTimeCollectorRequestsWindow),
+		conf,
+		initPIDController(conf),
+		responsetimecollector.NewTachymeterCollector(ResponseTimeCollectorRequestsWindow),
 		logger,
 	)
 
@@ -108,38 +49,48 @@ func main() {
 	}
 
 	var profiler *profiling.Profiler
-	if config.ProfilerIsEnabled {
-		priorityFetcher, err := profiling.NewRedisPriorityFetcher(config.RedisAddr, config.RedisPassword, config.RedisPrioritiesDB, config.RedisQueueDB)
+	if conf.Dimming.Profiler.Enabled {
+		priorityFetcher, err := profiling.NewRedisPriorityFetcher(
+			conf.Dimming.Profiler.Redis.Addr,
+			conf.Dimming.Profiler.Redis.Password,
+			conf.Dimming.Profiler.Redis.PrioritiesDB,
+			conf.Dimming.Profiler.Redis.QueueDB,
+		)
 		if err != nil {
 			panic(fmt.Errorf("could not create RedisPriorityFetcher: %w", err))
 		}
 
 		profiler = &profiling.Profiler{
-			Priorities:                               priorityFetcher,
-			Requests:                                 profiling.NewInfluxDBRequestWriter(config.ProfilerInfluxDBHost, config.ProfilerInfluxDBToken, config.ProfilerInfluxDBOrg, config.ProfilerInfluxDBBucket),
+			Priorities: priorityFetcher,
+			Requests: profiling.NewInfluxDBRequestWriter(
+				conf.Dimming.Profiler.InfluxDB.Host,
+				conf.Dimming.Profiler.InfluxDB.Token,
+				conf.Dimming.Profiler.InfluxDB.Org,
+				conf.Dimming.Profiler.InfluxDB.Bucket,
+			),
 			Aggregator:                               profiling.NewProfiledRequestAggregator(),
-			LowPriorityDimmingProbability:            config.ProfilerDimmingProbabilityLow,
-			LowPriorityDimmingProbabilityMultiplier:  config.ProfilerDimmingProbabilityLowMultiplier,
-			HighPriorityDimmingProbability:           config.ProfilerDimmingProbabilityHigh,
-			HighPriorityDimmingProbabilityMultiplier: config.ProfilerDimmingProbabilityHighMultiplier,
+			LowPriorityDimmingProbability:            conf.Dimming.Profiler.Probabilities.Low,
+			LowPriorityDimmingProbabilityMultiplier:  conf.Dimming.Profiler.Probabilities.LowMultiplier,
+			HighPriorityDimmingProbability:           conf.Dimming.Profiler.Probabilities.High,
+			HighPriorityDimmingProbabilityMultiplier: conf.Dimming.Profiler.Probabilities.HighMultiplier,
 		}
 	}
 
 	// Serve the reverse proxy with dimming control loop.
 	server := NewServer(&ServerOptions{
-		FrontendAddr:           fmt.Sprintf(":%v", config.FrontEndPort),
-		BackendAddr:            config.BackEndHost + ":" + config.BackEndPort,
+		FrontendAddr:           fmt.Sprintf(":%v", conf.Proxying.FrontendPort),
+		BackendAddr:            conf.Proxying.BackendHost + ":" + strconv.Itoa(conf.Proxying.BackendPort),
 		MaxConns:               2048,
 		ControlLoop:            controlLoop,
 		RequestFilter:          requestFilter,
 		PathProbabilities:      pathProbabilities,
 		Logger:                 logger,
-		IsDimmingEnabled:       config.IsDimmerEnabled,
+		IsDimmingEnabled:       conf.Dimming.Enabled,
 		OnlineTrainingService:  onlineTrainingService,
 		OfflineTrainingService: offlinetraining.NewOfflineTraining(),
-		IsProfilingEnabled:     config.ProfilerIsEnabled,
+		IsProfilingEnabled:     conf.Dimming.Profiler.Enabled,
 		ProfilingService:       profiler,
-		ProfilingSessionCookie: config.ProfilerSessionCookie,
+		ProfilingSessionCookie: conf.Dimming.Profiler.SessionCookie,
 	})
 
 	// Start the server in a goroutine so we can separately block the main
@@ -156,21 +107,21 @@ func main() {
 	}
 }
 
-func initLogger(config *Config) logging.Logger {
+func initLogger(conf *config.Config) logging.Logger {
 	var logger logging.Logger
-	if config.LoggerDriver == "noop" {
+	if conf.Logging.Driver == "noop" {
 		logger = logging.NewNoopLogger()
-	} else if config.LoggerDriver == "stdout" {
+	} else if conf.Logging.Driver == "stdout" {
 		logger = logging.NewStdoutLogger()
-	} else if config.LoggerDriver == "influxdb" {
+	} else if conf.Logging.Driver == "influxdb" {
 		logger = logging.NewInfluxDBLogger(
-			config.LoggerInfluxDBHost,
-			config.LoggerInfluxDBToken,
-			config.LoggerInfluxDBOrg,
-			config.LoggerInfluxDBBucket,
+			conf.Logging.InfluxDB.Host,
+			conf.Logging.InfluxDB.Token,
+			conf.Logging.InfluxDB.Org,
+			conf.Logging.InfluxDB.Bucket,
 		)
 	} else {
-		log.Fatalf("expected env var LOGGER_DRIVER one of {noop, stdout, influxdb}; got %s", config.LoggerDriver)
+		log.Fatalf("expected env var LOGGER_DRIVER one of {noop, stdout, influxdb}; got %s", conf.Logging.Driver)
 	}
 	return logger
 }
@@ -204,13 +155,13 @@ func initPathProbabilities() *filters.PathProbabilities {
 	return p
 }
 
-func initPIDController(config *Config) *pid.PIDController {
+func initPIDController(conf *config.Config) *pid.PIDController {
 	c, err := pid.NewPIDController(
 		pid.NewRealtimeClock(),
-		config.ControllerSetpoint,
-		config.ControllerKp,
-		config.ControllerKi,
-		config.ControllerKd,
+		conf.Dimming.Controller.Setpoint,
+		conf.Dimming.Controller.Kp,
+		conf.Dimming.Controller.Ki,
+		conf.Dimming.Controller.Kd,
 		// isReversed is true as we want a positive error (i.e., actual response
 		// time below desired setpoint) to reduce the controller output.
 		true,
@@ -221,7 +172,7 @@ func initPIDController(config *Config) *pid.PIDController {
 		// during "full" dimming even if requests are only made to dimmed
 		// components.
 		99,
-		config.ControllerSamplePeriod,
+		conf.Dimming.Controller.SamplePeriod,
 	)
 	if err != nil {
 		log.Fatalf("expected controller.NewPIDController() returns nil err; got err = %v", err)
@@ -231,16 +182,17 @@ func initPIDController(config *Config) *pid.PIDController {
 }
 
 func initControlLoop(
-	config *Config,
+	conf *config.Config,
 	pid *pid.PIDController,
 	responseTimeCollector responsetimecollector.Collector,
 	logger logging.Logger,
 ) *ServerControlLoop {
-	if config.ControllerPercentile != "p50" && config.ControllerPercentile != "p75" && config.ControllerPercentile != "p95" {
-		log.Fatalf("expected environment variable CONTROLLER_PERCENTILE to be one of {p50|p75|p95}; got %s", config.ControllerPercentile)
+	percentile := conf.Dimming.Controller.Percentile
+	if percentile != "p50" && percentile != "p75" && percentile != "p95" {
+		log.Fatalf("expected environment variable CONTROLLER_PERCENTILE to be one of {p50|p75|p95}; got %s", percentile)
 	}
 
-	c, err := NewServerControlLoop(pid, responseTimeCollector, config.ControllerPercentile, logger)
+	c, err := NewServerControlLoop(pid, responseTimeCollector, percentile, logger)
 	if err != nil {
 		log.Fatalf("expected NewServerControlLoop() returns nil err; got err = %v", err)
 	}
