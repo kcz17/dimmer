@@ -128,7 +128,7 @@ func ReadConfig() *Config {
 	}
 
 	var config Config
-	bindEnvs(&config)
+	bindEnvs(config)
 	if err := viper.Unmarshal(&config); err != nil {
 		log.Fatalf("error occured while reading configuration file: err = %s", err)
 	}
