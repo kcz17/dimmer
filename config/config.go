@@ -91,21 +91,21 @@ type Probabilities struct {
 }
 
 func setDefaults() {
-	viper.SetDefault("proxying.backendHost", "localhost")
-	viper.SetDefault("logging.driver", "noop")
+	viper.SetDefault("Proxying.BackendHost", "localhost")
+	viper.SetDefault("Logging.driver", "noop")
 
-	viper.SetDefault("dimming.controller.samplePeriod", 1)
-	viper.SetDefault("dimming.controller.percentile", "p95")
-	viper.SetDefault("dimming.controller.setpoint", 3)
-	viper.SetDefault("dimming.controller.kp", 2)
-	viper.SetDefault("dimming.controller.ki", 0.2)
-	viper.SetDefault("dimming.controller.kd", 0)
+	viper.SetDefault("Dimming.Controller.SamplePeriod", 1)
+	viper.SetDefault("Dimming.Controller.Percentile", "p95")
+	viper.SetDefault("Dimming.Controller.Setpoint", 3)
+	viper.SetDefault("Dimming.Controller.Kp", 2)
+	viper.SetDefault("Dimming.Controller.Ki", 0.2)
+	viper.SetDefault("Dimming.Controller.Kd", 0)
 
-	viper.SetDefault("dimming.profiler.enabled", false)
-	viper.SetDefault("dimming.profiler.probabilities.high", 0.01)
-	viper.SetDefault("dimming.profiler.probabilities.highMultiplier", 1)
-	viper.SetDefault("dimming.profiler.probabilities.low", 0.99)
-	viper.SetDefault("dimming.profiler.probabilities.lowMultiplier", 1)
+	viper.SetDefault("Dimming.Profiler.Enabled", false)
+	viper.SetDefault("Dimming.Profiler.Probabilities.High", 0.01)
+	viper.SetDefault("Dimming.Profiler.Probabilities.HighMultiplier", 1)
+	viper.SetDefault("Dimming.Profiler.Probabilities.Low", 0.99)
+	viper.SetDefault("Dimming.Profiler.Probabilities.LowMultiplier", 1)
 }
 
 func ReadConfig() *Config {
