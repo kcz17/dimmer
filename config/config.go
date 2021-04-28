@@ -5,6 +5,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
 	"log"
+	"os"
 )
 
 type Config struct {
@@ -92,7 +93,7 @@ type Probabilities struct {
 
 func setDefaults() {
 	viper.SetDefault("Proxying.BackendHost", "localhost")
-	viper.SetDefault("Logging.driver", "noop")
+	viper.SetDefault("Logging.Driver", "noop")
 
 	viper.SetDefault("Dimming.Controller.SamplePeriod", 1)
 	viper.SetDefault("Dimming.Controller.Percentile", "p95")
@@ -142,6 +143,7 @@ func ReadConfig() *Config {
 		}
 
 		fmt.Println("Check your configuration file and try again.")
+		os.Exit(1)
 	}
 
 	return &config
