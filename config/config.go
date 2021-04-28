@@ -120,7 +120,6 @@ func ReadConfig() *Config {
 	viper.SetConfigType("yaml")
 	viper.SetConfigName("config")
 	viper.AddConfigPath(".")
-	viper.AddConfigPath("/app")
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			log.Fatalf("error: /app/config.yaml not found. Are you sure you have configured the ConfigMap?\nerr = %s", err)
