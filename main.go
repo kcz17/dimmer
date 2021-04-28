@@ -49,12 +49,12 @@ func main() {
 	}
 
 	var profiler *profiling.Profiler
-	if conf.Dimming.Profiler.Enabled {
+	if *conf.Dimming.Profiler.Enabled {
 		priorityFetcher, err := profiling.NewRedisPriorityFetcher(
-			conf.Dimming.Profiler.Redis.Addr,
-			conf.Dimming.Profiler.Redis.Password,
-			conf.Dimming.Profiler.Redis.PrioritiesDB,
-			conf.Dimming.Profiler.Redis.QueueDB,
+			*conf.Dimming.Profiler.Redis.Addr,
+			*conf.Dimming.Profiler.Redis.Password,
+			*conf.Dimming.Profiler.Redis.PrioritiesDB,
+			*conf.Dimming.Profiler.Redis.QueueDB,
 		)
 		if err != nil {
 			panic(fmt.Errorf("could not create RedisPriorityFetcher: %w", err))
@@ -63,34 +63,34 @@ func main() {
 		profiler = &profiling.Profiler{
 			Priorities: priorityFetcher,
 			Requests: profiling.NewInfluxDBRequestWriter(
-				conf.Dimming.Profiler.InfluxDB.Host,
-				conf.Dimming.Profiler.InfluxDB.Token,
-				conf.Dimming.Profiler.InfluxDB.Org,
-				conf.Dimming.Profiler.InfluxDB.Bucket,
+				*conf.Dimming.Profiler.InfluxDB.Host,
+				*conf.Dimming.Profiler.InfluxDB.Token,
+				*conf.Dimming.Profiler.InfluxDB.Org,
+				*conf.Dimming.Profiler.InfluxDB.Bucket,
 			),
 			Aggregator:                               profiling.NewProfiledRequestAggregator(),
-			LowPriorityDimmingProbability:            conf.Dimming.Profiler.Probabilities.Low,
-			LowPriorityDimmingProbabilityMultiplier:  conf.Dimming.Profiler.Probabilities.LowMultiplier,
-			HighPriorityDimmingProbability:           conf.Dimming.Profiler.Probabilities.High,
-			HighPriorityDimmingProbabilityMultiplier: conf.Dimming.Profiler.Probabilities.HighMultiplier,
+			LowPriorityDimmingProbability:            *conf.Dimming.Profiler.Probabilities.Low,
+			LowPriorityDimmingProbabilityMultiplier:  *conf.Dimming.Profiler.Probabilities.LowMultiplier,
+			HighPriorityDimmingProbability:           *conf.Dimming.Profiler.Probabilities.High,
+			HighPriorityDimmingProbabilityMultiplier: *conf.Dimming.Profiler.Probabilities.HighMultiplier,
 		}
 	}
 
 	// Serve the reverse proxy with dimming control loop.
 	server := NewServer(&ServerOptions{
 		FrontendAddr:           fmt.Sprintf(":%v", conf.Proxying.FrontendPort),
-		BackendAddr:            conf.Proxying.BackendHost + ":" + strconv.Itoa(conf.Proxying.BackendPort),
+		BackendAddr:            *conf.Proxying.BackendHost + ":" + strconv.Itoa(*conf.Proxying.BackendPort),
 		MaxConns:               2048,
 		ControlLoop:            controlLoop,
 		RequestFilter:          requestFilter,
 		PathProbabilities:      pathProbabilities,
 		Logger:                 logger,
-		IsDimmingEnabled:       conf.Dimming.Enabled,
+		IsDimmingEnabled:       *conf.Dimming.Enabled,
 		OnlineTrainingService:  onlineTrainingService,
 		OfflineTrainingService: offlinetraining.NewOfflineTraining(),
-		IsProfilingEnabled:     conf.Dimming.Profiler.Enabled,
+		IsProfilingEnabled:     *conf.Dimming.Profiler.Enabled,
 		ProfilingService:       profiler,
-		ProfilingSessionCookie: conf.Dimming.Profiler.SessionCookie,
+		ProfilingSessionCookie: *conf.Dimming.Profiler.SessionCookie,
 	})
 
 	// Start the server in a goroutine so we can separately block the main
@@ -109,16 +109,16 @@ func main() {
 
 func initLogger(conf *config.Config) logging.Logger {
 	var logger logging.Logger
-	if conf.Logging.Driver == "noop" {
+	if *conf.Logging.Driver == "noop" {
 		logger = logging.NewNoopLogger()
-	} else if conf.Logging.Driver == "stdout" {
+	} else if *conf.Logging.Driver == "stdout" {
 		logger = logging.NewStdoutLogger()
-	} else if conf.Logging.Driver == "influxdb" {
+	} else if *conf.Logging.Driver == "influxdb" {
 		logger = logging.NewInfluxDBLogger(
-			conf.Logging.InfluxDB.Host,
-			conf.Logging.InfluxDB.Token,
-			conf.Logging.InfluxDB.Org,
-			conf.Logging.InfluxDB.Bucket,
+			*conf.Logging.InfluxDB.Host,
+			*conf.Logging.InfluxDB.Token,
+			*conf.Logging.InfluxDB.Org,
+			*conf.Logging.InfluxDB.Bucket,
 		)
 	} else {
 		log.Fatalf("expected env var LOGGER_DRIVER one of {noop, stdout, influxdb}; got %s", conf.Logging.Driver)
@@ -129,7 +129,7 @@ func initLogger(conf *config.Config) logging.Logger {
 func initPaths(conf *config.Config) []string {
 	var paths []string
 	for _, component := range conf.Dimming.DimmableComponents {
-		paths = append(paths, component.Path)
+		paths = append(paths, *component.Path)
 	}
 	return paths
 }
@@ -137,14 +137,14 @@ func initPaths(conf *config.Config) []string {
 func initRequestFilter(conf *config.Config) *filters.RequestFilter {
 	filter := filters.NewRequestFilter()
 	for _, component := range conf.Dimming.DimmableComponents {
-		if component.Method.ShouldMatchAll {
-			filter.AddPathForAllMethods(component.Path)
+		if *component.Method.ShouldMatchAll {
+			filter.AddPathForAllMethods(*component.Path)
 		} else {
-			filter.AddPath(component.Path, component.Method.Method)
+			filter.AddPath(*component.Path, *component.Method.Method)
 		}
 
 		for _, exclusion := range component.Exclusions {
-			if err := filter.AddRefererExclusion(component.Path, exclusion.Method, exclusion.Substring); err != nil {
+			if err := filter.AddRefererExclusion(*component.Path, *exclusion.Method, *exclusion.Substring); err != nil {
 				log.Fatalf("expected filter.AddRefererExclusion(path=%s, method=%s, substring=%s) returns nil err; got err = %v", component.Path, exclusion.Method, exclusion.Substring, err)
 			}
 		}
@@ -163,7 +163,7 @@ func initPathProbabilities(conf *config.Config) *filters.PathProbabilities {
 	for _, component := range conf.Dimming.DimmableComponents {
 		if component.Probability != nil {
 			rule := filters.PathProbabilityRule{
-				Path:        component.Path,
+				Path:        *component.Path,
 				Probability: *component.Probability,
 			}
 
@@ -179,10 +179,10 @@ func initPathProbabilities(conf *config.Config) *filters.PathProbabilities {
 func initPIDController(conf *config.Config) *pid.PIDController {
 	c, err := pid.NewPIDController(
 		pid.NewRealtimeClock(),
-		conf.Dimming.Controller.Setpoint,
-		conf.Dimming.Controller.Kp,
-		conf.Dimming.Controller.Ki,
-		conf.Dimming.Controller.Kd,
+		*conf.Dimming.Controller.Setpoint,
+		*conf.Dimming.Controller.Kp,
+		*conf.Dimming.Controller.Ki,
+		*conf.Dimming.Controller.Kd,
 		// isReversed is true as we want a positive error (i.e., actual response
 		// time below desired setpoint) to reduce the controller output.
 		true,
@@ -193,7 +193,7 @@ func initPIDController(conf *config.Config) *pid.PIDController {
 		// during "full" dimming even if requests are only made to dimmed
 		// components.
 		99,
-		conf.Dimming.Controller.SamplePeriod,
+		*conf.Dimming.Controller.SamplePeriod,
 	)
 	if err != nil {
 		log.Fatalf("expected controller.NewPIDController() returns nil err; got err = %v", err)
@@ -208,7 +208,7 @@ func initControlLoop(
 	responseTimeCollector responsetimecollector.Collector,
 	logger logging.Logger,
 ) *ServerControlLoop {
-	percentile := conf.Dimming.Controller.Percentile
+	percentile := *conf.Dimming.Controller.Percentile
 	if percentile != "p50" && percentile != "p75" && percentile != "p95" {
 		log.Fatalf("expected environment variable CONTROLLER_PERCENTILE to be one of {p50|p75|p95}; got %s", percentile)
 	}
