@@ -35,12 +35,12 @@ func main() {
 	)
 
 	// Filters used to selectively dim routes.
-	requestFilter := initRequestFilter()
-	pathProbabilities := initPathProbabilities()
+	requestFilter := initRequestFilter(conf)
+	pathProbabilities := initPathProbabilities(conf)
 
 	onlineTrainingService, err := onlinetraining.NewOnlineTraining(
 		logger,
-		initPaths(),
+		initPaths(conf),
 		pathProbabilities,
 		1,
 	)
@@ -126,32 +126,53 @@ func initLogger(conf *config.Config) logging.Logger {
 	return logger
 }
 
-func initPaths() []string {
-	return []string{
-		"recommender",
-		"news",
-		"cart",
+func initPaths(conf *config.Config) []string {
+	var paths []string
+	for _, component := range conf.Dimming.DimmableComponents {
+		paths = append(paths, component.Path)
 	}
+	return paths
 }
 
-func initRequestFilter() *filters.RequestFilter {
+func initRequestFilter(conf *config.Config) *filters.RequestFilter {
 	filter := filters.NewRequestFilter()
-	filter.AddPathForAllMethods("recommender")
-	filter.AddPathForAllMethods("news")
-	filter.AddPath("cart", "GET")
-	if err := filter.AddRefererExclusion("cart", "GET", "basket.html"); err != nil {
-		panic(fmt.Sprintf("expected filter.AddRefererExclusion() returns nil err; got err = %v", err))
+	for _, component := range conf.Dimming.DimmableComponents {
+		if component.Method.ShouldMatchAll {
+			filter.AddPathForAllMethods(component.Path)
+		} else {
+			filter.AddPath(component.Path, component.Method.Method)
+		}
+
+		for _, exclusion := range component.Exclusions {
+			if err := filter.AddRefererExclusion(component.Path, exclusion.Method, exclusion.Substring); err != nil {
+				log.Fatalf("expected filter.AddRefererExclusion(path=%s, method=%s, substring=%s) returns nil err; got err = %v", component.Path, exclusion.Method, exclusion.Substring, err)
+			}
+		}
 	}
 	return filter
 }
 
-func initPathProbabilities() *filters.PathProbabilities {
+func initPathProbabilities(conf *config.Config) *filters.PathProbabilities {
 	// Set the defaultValue to 1 so we allow dimming by default for paths which
 	// are not in the probabilities list.
 	p, err := filters.NewPathProbabilities(1)
 	if err != nil {
 		panic(fmt.Sprintf("expected initPathProbabilities() returns nil err; got err = %v", err))
 	}
+
+	for _, component := range conf.Dimming.DimmableComponents {
+		if component.Probability != nil {
+			rule := filters.PathProbabilityRule{
+				Path:        component.Path,
+				Probability: *component.Probability,
+			}
+
+			if err := p.Set(rule); err != nil {
+				log.Fatalf("expected PathProbabilities.Set(rule=%+v) returns nil err; got err = %v", rule, err)
+			}
+		}
+	}
+
 	return p
 }
 

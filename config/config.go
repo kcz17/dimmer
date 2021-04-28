@@ -39,11 +39,19 @@ type Dimming struct {
 }
 
 type DimmableComponent struct {
-	Path string `mapstructure:"path" validate:"required"`
+	Method MatchableMethod `mapstructure:"method" validate:"required"`
+	Path   string          `mapstructure:"path" validate:"required"`
 	// Probability is a pointer as probabilities will be set to an external
 	// default if it is nil.
 	Probability *float64     `mapstructure:"probability"`
 	Exclusions  []Exclusions `mapstructure:"exclusions"`
+}
+
+type MatchableMethod struct {
+	ShouldMatchAll bool `mapstructure:"shouldMatchAll" validate:"required_without=Method"`
+	// Method must be set if ShouldMatchAll is false. If ShouldMatchAll is true,
+	// Method is ignored.
+	Method string `mapstructure:"method" validate:"required_without=ShouldMatchAll required_if=ShouldMatchAll false"`
 }
 
 type Exclusions struct {
