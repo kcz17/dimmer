@@ -11,7 +11,6 @@ import (
 	"github.com/kcz17/dimmer/profiling"
 	"github.com/kcz17/dimmer/responsetimecollector"
 	"log"
-	"strconv"
 )
 
 // ResponseTimeCollectorRequestsWindow defines the number of requests from which
@@ -63,7 +62,7 @@ func main() {
 		profiler = &profiling.Profiler{
 			Priorities: priorityFetcher,
 			Requests: profiling.NewInfluxDBRequestWriter(
-				*conf.Dimming.Profiler.InfluxDB.Host,
+				*conf.Dimming.Profiler.InfluxDB.Addr,
 				*conf.Dimming.Profiler.InfluxDB.Token,
 				*conf.Dimming.Profiler.InfluxDB.Org,
 				*conf.Dimming.Profiler.InfluxDB.Bucket,
@@ -78,8 +77,8 @@ func main() {
 
 	// Serve the reverse proxy with dimming control loop.
 	server := NewServer(&ServerOptions{
-		FrontendAddr:           fmt.Sprintf(":%v", *conf.Proxying.FrontendPort),
-		BackendAddr:            *conf.Proxying.BackendHost + ":" + strconv.Itoa(*conf.Proxying.BackendPort),
+		FrontendAddr:           fmt.Sprintf(":%d", *conf.Connection.FrontendPort),
+		BackendAddr:            fmt.Sprintf("%s:%d", *conf.Connection.BackendHost, *conf.Connection.BackendPort),
 		MaxConns:               2048,
 		ControlLoop:            controlLoop,
 		RequestFilter:          requestFilter,
@@ -102,7 +101,7 @@ func main() {
 	}()
 
 	api := APIServer{Server: server}
-	if err := api.ListenAndServe(":8079"); err != nil {
+	if err := api.ListenAndServe(fmt.Sprintf(":%d", *conf.Connection.AdminPort)); err != nil {
 		panic(fmt.Errorf("expected api.ListenAndServe() returns nil err; got err = %w", err))
 	}
 }
@@ -115,7 +114,7 @@ func initLogger(conf *config.Config) logging.Logger {
 		logger = logging.NewStdoutLogger()
 	} else if *conf.Logging.Driver == "influxdb" {
 		logger = logging.NewInfluxDBLogger(
-			*conf.Logging.InfluxDB.Host,
+			*conf.Logging.InfluxDB.Addr,
 			*conf.Logging.InfluxDB.Token,
 			*conf.Logging.InfluxDB.Org,
 			*conf.Logging.InfluxDB.Bucket,

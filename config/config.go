@@ -11,15 +11,16 @@ import (
 )
 
 type Config struct {
-	Proxying Proxying `mapstructure:"proxying" validate:"required"`
-	Logging  Logging  `mapstructure:"logging" validate:"required"`
-	Dimming  Dimming  `mapstructure:"dimming" validate:"required"`
+	Connection Connection `mapstructure:"connection" validate:"required"`
+	Logging    Logging    `mapstructure:"logging" validate:"required"`
+	Dimming    Dimming    `mapstructure:"dimming" validate:"required"`
 }
 
-type Proxying struct {
+type Connection struct {
 	FrontendPort *int    `mapstructure:"frontendPort" validate:"required"`
 	BackendHost  *string `mapstructure:"backendHost" validate:"required"`
 	BackendPort  *int    `mapstructure:"backendPort" validate:"required"`
+	AdminPort    *int    `mapstructure:"adminPort" validate:"required"`
 }
 
 type Logging struct {
@@ -28,7 +29,7 @@ type Logging struct {
 }
 
 type InfluxDB struct {
-	Host   *string `mapstructure:"host" validate:"required"`
+	Addr   *string `mapstructure:"addr" validate:"required"`
 	Token  *string `mapstructure:"token" validate:"required"`
 	Org    *string `mapstructure:"org" validate:"required"`
 	Bucket *string `mapstructure:"bucket" validate:"required"`
