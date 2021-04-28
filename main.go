@@ -78,7 +78,7 @@ func main() {
 
 	// Serve the reverse proxy with dimming control loop.
 	server := NewServer(&ServerOptions{
-		FrontendAddr:           fmt.Sprintf(":%v", conf.Proxying.FrontendPort),
+		FrontendAddr:           fmt.Sprintf(":%v", *conf.Proxying.FrontendPort),
 		BackendAddr:            *conf.Proxying.BackendHost + ":" + strconv.Itoa(*conf.Proxying.BackendPort),
 		MaxConns:               2048,
 		ControlLoop:            controlLoop,
@@ -121,7 +121,7 @@ func initLogger(conf *config.Config) logging.Logger {
 			*conf.Logging.InfluxDB.Bucket,
 		)
 	} else {
-		log.Fatalf("expected env var LOGGER_DRIVER one of {noop, stdout, influxdb}; got %s", conf.Logging.Driver)
+		log.Fatalf("expected env var LOGGER_DRIVER one of {noop, stdout, influxdb}; got %s", *conf.Logging.Driver)
 	}
 	return logger
 }
@@ -145,7 +145,7 @@ func initRequestFilter(conf *config.Config) *filters.RequestFilter {
 
 		for _, exclusion := range component.Exclusions {
 			if err := filter.AddRefererExclusion(*component.Path, *exclusion.Method, *exclusion.Substring); err != nil {
-				log.Fatalf("expected filter.AddRefererExclusion(path=%s, method=%s, substring=%s) returns nil err; got err = %v", component.Path, exclusion.Method, exclusion.Substring, err)
+				log.Fatalf("expected filter.AddRefererExclusion(path=%s, method=%s, substring=%s) returns nil err; got err = %v", *component.Path, *exclusion.Method, *exclusion.Substring, err)
 			}
 		}
 	}
