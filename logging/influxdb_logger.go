@@ -1,10 +1,10 @@
 package logging
 
 import (
-	"fmt"
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/influxdata/influxdb-client-go/v2/api"
 	"github.com/kcz17/dimmer/filters"
+	"log"
 	"time"
 )
 
@@ -26,7 +26,7 @@ func NewInfluxDBLogger(baseURL, authToken, org, bucket string) *influxDBLogger {
 	errorsCh := writeAPI.Errors()
 	go func() {
 		for err := range errorsCh {
-			fmt.Printf("[%s] influxdb2 logging async write error: %v\n", time.Now().Format(time.StampMilli), err)
+			log.Printf("influxdb2 logging async write error: %v\n", err)
 		}
 	}()
 

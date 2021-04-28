@@ -1,9 +1,9 @@
 package profiling
 
 import (
-	"fmt"
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/influxdata/influxdb-client-go/v2/api"
+	"log"
 	"time"
 )
 
@@ -30,7 +30,7 @@ func NewInfluxDBRequestWriter(addr, authToken, org, bucket string) *InfluxDBRequ
 	errorsCh := writeAPI.Errors()
 	go func() {
 		for err := range errorsCh {
-			fmt.Printf("[%s] influxdb2 profiling async write error: %v\n", time.Now().Format(time.StampMilli), err)
+			log.Printf("influxdb2 profiling async write error: %v\n", err)
 		}
 	}()
 

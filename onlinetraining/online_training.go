@@ -8,6 +8,7 @@ import (
 	"github.com/kcz17/dimmer/responsetimecollector"
 	"github.com/kcz17/dimmer/stats"
 	"github.com/valyala/fasthttp"
+	"log"
 	"math/rand"
 	"strings"
 	"sync"
@@ -101,7 +102,7 @@ func (t *OnlineTraining) trainingLoop() {
 			if err := t.candidatePathProbabilities.SetAll(newCandidateRules); err != nil {
 				panic(fmt.Errorf("expected t.candidatePathProbabilities.SetAll(rules = %+v) returns nil err; got err = %w", newCandidateRules, err))
 			}
-			fmt.Printf("[%s] [Online Testing] starting test with candidate rules: %+v\n", time.Now().Format(time.StampMilli), newCandidateRules)
+			log.Printf("[Online Testing] starting test with candidate rules: %+v\n", newCandidateRules)
 
 			t.candidateGroupResponseTimes.Reset()
 			t.controlGroupResponseTimes.Reset()
@@ -118,15 +119,14 @@ func (t *OnlineTraining) trainingLoop() {
 			// Test whether the rules collected are significant, overriding the
 			// main path probabilities if so.
 			comparison := t.checkCandidateImprovesResponseTimes()
-			fmt.Printf(
-				"[%s] [Online Testing] finished test with %d candidate response times collected for candidate rules: %+v\n",
-				time.Now().Format(time.StampMilli),
+			log.Printf(
+				"[Online Testing] finished test with %d candidate response times collected for candidate rules: %+v\n",
 				t.candidateGroupResponseTimes.Len(),
 				newCandidateRules,
 			)
-			fmt.Printf("[%s] [Online Testing] significant reduction? %t\n", time.Now().Format(time.StampMilli), comparison)
+			log.Printf("[Online Testing] significant reduction? %t\n", comparison)
 			if comparison {
-				fmt.Printf("[%s] [Online Testing] updating control with candidate rules\n", time.Now().Format(time.StampMilli))
+				log.Printf("[Online Testing] updating control with candidate rules\n")
 				t.logger.LogControlProbabilityChange(newCandidateRules)
 				if err := t.controlPathProbabilities.SetAll(newCandidateRules); err != nil {
 					panic(fmt.Errorf("expected t.controlPathProbabilities.SetAll(rules = %+v) returns nil err; got err = %w", newCandidateRules, err))
@@ -185,13 +185,13 @@ func (t *OnlineTraining) checkCandidateImprovesResponseTimes() bool {
 
 	controlP95 := float64(controlAggregate.P95) / float64(time.Second)
 	candidateP95 := float64(candidateAggregate.P95) / float64(time.Second)
-	fmt.Printf("[%s] [Online Testing] control p95: %.3f, candidate p95: %.3f\n", time.Now().Format(time.StampMilli), controlP95, candidateP95)
+	log.Printf("[Online Testing] control p95: %.3f, candidate p95: %.3f\n", controlP95, candidateP95)
 
 	// Use a heuristic based on whether the P95 > 50ms to determine whether
 	// enough data has been collected and a significant change is possible.
 	candidateCollectedEnoughData := candidateP95 > 0.05
 	if !candidateCollectedEnoughData {
-		fmt.Printf("[%s] candidate p95 does not have enough data", time.Now().Format(time.StampMilli))
+		log.Printf("candidate p95 does not have enough data\n")
 		return false
 	}
 
