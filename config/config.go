@@ -6,6 +6,8 @@ import (
 	"github.com/spf13/viper"
 	"log"
 	"os"
+	"reflect"
+	"strings"
 )
 
 type Config struct {
@@ -126,6 +128,7 @@ func ReadConfig() *Config {
 	}
 
 	var config Config
+	bindEnvs(&config)
 	if err := viper.Unmarshal(&config); err != nil {
 		log.Fatalf("error occured while reading configuration file: err = %s", err)
 	}
@@ -147,4 +150,25 @@ func ReadConfig() *Config {
 	}
 
 	return &config
+}
+
+// bindEnvs binds all environment variables automatically.
+// See: https://github.com/spf13/viper/issues/188#issuecomment-399884438
+func bindEnvs(iface interface{}, parts ...string) {
+	ifv := reflect.ValueOf(iface)
+	ift := reflect.TypeOf(iface)
+	for i := 0; i < ift.NumField(); i++ {
+		v := ifv.Field(i)
+		t := ift.Field(i)
+		tv, ok := t.Tag.Lookup("mapstructure")
+		if !ok {
+			continue
+		}
+		switch v.Kind() {
+		case reflect.Struct:
+			bindEnvs(v.Interface(), append(parts, tv)...)
+		default:
+			_ = viper.BindEnv(strings.Join(append(parts, tv), "."))
+		}
+	}
 }
