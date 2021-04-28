@@ -137,7 +137,7 @@ func initPaths(conf *config.Config) []string {
 func initRequestFilter(conf *config.Config) *filters.RequestFilter {
 	filter := filters.NewRequestFilter()
 	for _, component := range conf.Dimming.DimmableComponents {
-		if *component.Method.ShouldMatchAll {
+		if component.Method.ShouldMatchAll != nil && *component.Method.ShouldMatchAll {
 			filter.AddPathForAllMethods(*component.Path)
 		} else {
 			filter.AddPath(*component.Path, *component.Method.Method)
