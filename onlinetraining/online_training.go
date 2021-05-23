@@ -231,7 +231,7 @@ func (t *OnlineTraining) checkCandidateImprovesResponseTimes() bool {
 	// percentile is overly sensitive.
 	controlAll := t.controlGroupResponseTimes.All()
 	candidateAll := t.candidateGroupResponseTimes.All()
-	return stats.KolmogorovSmirnovTestRejection(controlAll, candidateAll, stats.P99d9)
+	return stats.KolmogorovSmirnovTestRejection(controlAll, candidateAll, stats.P99d5)
 }
 
 func RequestHasCookie(request *fasthttp.Request) bool {
