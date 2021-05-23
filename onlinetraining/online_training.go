@@ -103,6 +103,10 @@ func (t *OnlineTraining) trainingLoop() {
 				panic(fmt.Errorf("expected t.candidatePathProbabilities.SetAll(rules = %+v) returns nil err; got err = %w", newCandidateRules, err))
 			}
 			log.Printf("[Online Testing] starting test with candidate rules: %+v\n", newCandidateRules)
+			t.logger.LogOnlineTrainingProbabilities(
+				t.controlPathProbabilities.ListForPaths(t.paths),
+				t.candidatePathProbabilities.ListForPaths(t.paths),
+			)
 
 			t.candidateGroupResponseTimes.Reset()
 			t.controlGroupResponseTimes.Reset()
@@ -127,7 +131,6 @@ func (t *OnlineTraining) trainingLoop() {
 			log.Printf("[Online Testing] significant reduction? %t\n", comparison)
 			if comparison {
 				log.Printf("[Online Testing] updating control with candidate rules\n")
-				t.logger.LogControlProbabilityChange(newCandidateRules)
 				if err := t.controlPathProbabilities.SetAll(newCandidateRules); err != nil {
 					panic(fmt.Errorf("expected t.controlPathProbabilities.SetAll(rules = %+v) returns nil err; got err = %w", newCandidateRules, err))
 				}

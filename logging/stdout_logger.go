@@ -1,7 +1,6 @@
 package logging
 
 import (
-	"github.com/kcz17/dimmer/filters"
 	"log"
 )
 
@@ -29,6 +28,6 @@ func (*stdoutLogger) LogPIDControllerState(p float64, i float64, d float64, erro
 	log.Printf("p: %.3f, i: %.3f, d: %.3f, e(t): %.3f\n", p, i, d, errorTerm)
 }
 
-func (*stdoutLogger) LogControlProbabilityChange(probabilities []filters.PathProbabilityRule) {
-	log.Printf("control probabilities changed: %+v\n", probabilities)
+func (*stdoutLogger) LogOnlineTrainingProbabilities(control map[string]float64, candidate map[string]float64) {
+	log.Printf("online training probabilities:\n\tcontrol: %+v\n\tcandidate: %+v\n", control, candidate)
 }

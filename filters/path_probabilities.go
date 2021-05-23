@@ -51,6 +51,17 @@ func (p *PathProbabilities) List() map[string]float64 {
 	return p.probabilities
 }
 
+func (p *PathProbabilities) ListForPaths(paths []string) map[string]float64 {
+	p.probabilitiesMux.RLock()
+	defer p.probabilitiesMux.RUnlock()
+
+	probabilities := make(map[string]float64)
+	for _, path := range paths {
+		probabilities[path] = p.Get(path)
+	}
+	return probabilities
+}
+
 func (p *PathProbabilities) Get(path string) float64 {
 	p.probabilitiesMux.RLock()
 	probability, exists := p.probabilities[path]

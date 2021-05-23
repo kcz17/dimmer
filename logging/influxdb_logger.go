@@ -3,7 +3,6 @@ package logging
 import (
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/influxdata/influxdb-client-go/v2/api"
-	"github.com/kcz17/dimmer/filters"
 	"log"
 	"time"
 )
@@ -69,11 +68,19 @@ func (l *influxDBLogger) LogPIDControllerState(p float64, i float64, d float64, 
 	l.asyncWriter.WritePoint(point)
 }
 
-func (l *influxDBLogger) LogControlProbabilityChange(probabilities []filters.PathProbabilityRule) {
-	point := influxdb2.NewPointWithMeasurement("dimmer_control_probabilities").
-		SetTime(time.Now())
-	for _, probability := range probabilities {
-		point.AddField(probability.Path, probability.Probability)
+func (l *influxDBLogger) LogOnlineTrainingProbabilities(control map[string]float64, candidate map[string]float64) {
+	timestamp := time.Now()
+	controlPoint := influxdb2.NewPointWithMeasurement("dimmer_online_training_control").
+		SetTime(timestamp)
+	for path, probability := range control {
+		controlPoint.AddField(path, probability)
 	}
-	l.asyncWriter.WritePoint(point)
+	l.asyncWriter.WritePoint(controlPoint)
+
+	candidatePoint := influxdb2.NewPointWithMeasurement("dimmer_online_training_candidate").
+		SetTime(timestamp)
+	for path, probability := range candidate {
+		candidatePoint.AddField(path, probability)
+	}
+	l.asyncWriter.WritePoint(candidatePoint)
 }
