@@ -26,6 +26,7 @@ type OnlineTraining struct {
 	candidateGroupResponseTimes responsetimecollector.Collector
 	candidatePathProbabilities  *filters.PathProbabilities
 	paths                       []string
+	lastPathIndexSampled        int
 	// controlPathProbabilities is a pointer to the main ("control") group
 	// of path probabilities applied to the majority of requests under Server.
 	controlPathProbabilities *filters.PathProbabilities
@@ -46,12 +47,22 @@ func NewOnlineTraining(logger logging.Logger, paths []string, controlPathProbabi
 		return nil, fmt.Errorf("expected filters.NewPathProbabilities() returns nil err; got err = %w", err)
 	}
 
+	for _, path := range paths {
+		if err := candidatePathProbabilities.Set(filters.PathProbabilityRule{
+			Path:        path,
+			Probability: controlPathProbabilities.Get(path),
+		}); err != nil {
+			return nil, fmt.Errorf("expected initial candidate probabilities setting returns nil err; got err = %w", err)
+		}
+	}
+
 	return &OnlineTraining{
 		logger:                      logger,
 		controlGroupResponseTimes:   responsetimecollector.NewTachymeterCollector(2000),
 		candidateGroupResponseTimes: responsetimecollector.NewArrayCollector(),
 		candidatePathProbabilities:  candidatePathProbabilities,
 		paths:                       paths,
+		lastPathIndexSampled:        len(paths) - 1,
 		controlPathProbabilities:    controlPathProbabilities,
 		mux:                         &sync.Mutex{},
 	}, nil
@@ -166,19 +177,29 @@ func (t *OnlineTraining) sampleCandidateGroupProbabilities() []filters.PathProba
 	// probability. The variance is set to 0.5 based on empirical observations.
 	variance := 0.5
 
+	nextIndexToSample := (t.lastPathIndexSampled + 1) % len(t.paths)
+
 	var rules []filters.PathProbabilityRule
-	for _, path := range t.paths {
-		rules = append(rules, filters.PathProbabilityRule{
-			Path: path,
-			Probability: stats.SampleTruncatedNormalDistribution(
+	for i, path := range t.paths {
+		var probability float64
+		if i == nextIndexToSample {
+			probability = stats.SampleTruncatedNormalDistribution(
 				0,
 				1,
 				t.candidatePathProbabilities.Get(path),
 				variance,
-			),
+			)
+		} else {
+			probability = t.candidatePathProbabilities.Get(path)
+		}
+
+		rules = append(rules, filters.PathProbabilityRule{
+			Path:        path,
+			Probability: probability,
 		})
 	}
 
+	t.lastPathIndexSampled = nextIndexToSample
 	return rules
 }
 
