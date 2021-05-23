@@ -205,12 +205,12 @@ func (t *OnlineTraining) checkCandidateImprovesResponseTimes() bool {
 	}
 
 	// Test whether there is a significant change in response time distributions
-	// by performing a Kolmogorov-Smirnov test at the 95th percentile. The 95th
-	// percentile has been chosen based on empirical tests where the 99th
+	// by performing a Kolmogorov-Smirnov test at the 99th percentile. The 99th
+	// percentile has been chosen based on empirical tests where the 99.5th
 	// percentile is overly sensitive.
 	controlAll := t.controlGroupResponseTimes.All()
 	candidateAll := t.candidateGroupResponseTimes.All()
-	return stats.KolmogorovSmirnovTestRejection(controlAll, candidateAll, stats.P95)
+	return stats.KolmogorovSmirnovTestRejection(controlAll, candidateAll, stats.P99)
 }
 
 func RequestHasCookie(request *fasthttp.Request) bool {
