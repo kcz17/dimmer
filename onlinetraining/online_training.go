@@ -186,7 +186,7 @@ func (t *OnlineTraining) sampleCandidateGroupProbabilities() []filters.PathProba
 	// Sample a set of probabilities for rules using random optimisation with
 	// a normal distribution, setting the mean to be the current path
 	// probability. The variance is set to 0.5 based on empirical observations.
-	variance := 0.5
+	variance := 0.8
 
 	nextIndexToSample := (t.lastPathIndexSampled + 1) % len(t.paths)
 
