@@ -26,7 +26,6 @@ type OnlineTraining struct {
 	candidateGroupResponseTimes responsetimecollector.Collector
 	candidatePathProbabilities  *filters.PathProbabilities
 	paths                       []string
-	lastPathIndexSampled        int
 	// controlPathProbabilities is a pointer to the main ("control") group
 	// of path probabilities applied to the majority of requests under Server.
 	controlPathProbabilities *filters.PathProbabilities
@@ -62,7 +61,6 @@ func NewOnlineTraining(logger logging.Logger, paths []string, controlPathProbabi
 		candidateGroupResponseTimes: responsetimecollector.NewArrayCollector(),
 		candidatePathProbabilities:  candidatePathProbabilities,
 		paths:                       paths,
-		lastPathIndexSampled:        len(paths) - 1,
 		controlPathProbabilities:    controlPathProbabilities,
 		mux:                         &sync.Mutex{},
 	}, nil
@@ -106,6 +104,9 @@ func (t *OnlineTraining) trainingLoop() {
 	// the controller to react to a new load test.
 	isInAdjustmentPeriod := true
 
+	// Used to change only one path probability at one time.
+	pathIdxToChange := 0
+
 	for {
 		select {
 		// Stop the control loop when Stop() called.
@@ -118,7 +119,11 @@ func (t *OnlineTraining) trainingLoop() {
 			}
 
 			// Sample new rules.
-			newCandidateRules := t.sampleCandidateGroupProbabilities()
+			newCandidateRules := t.sampleCandidateGroupProbabilities(pathIdxToChange)
+			hasProbabilityDecreased := t.controlPathProbabilities.Get(t.paths[pathIdxToChange]) <
+				t.candidatePathProbabilities.Get(t.paths[pathIdxToChange])
+			pathIdxToChange = (pathIdxToChange + 1) % len(t.paths)
+
 			t.candidatePathProbabilities.Clear()
 			if err := t.candidatePathProbabilities.SetAll(newCandidateRules); err != nil {
 				panic(fmt.Errorf("expected t.candidatePathProbabilities.SetAll(rules = %+v) returns nil err; got err = %w", newCandidateRules, err))
@@ -143,7 +148,7 @@ func (t *OnlineTraining) trainingLoop() {
 
 			// Test whether the rules collected are significant, overriding the
 			// main path probabilities if so.
-			comparison := t.checkCandidateImprovesResponseTimes()
+			comparison := t.checkCandidateCausesIprovement(hasProbabilityDecreased)
 			log.Printf(
 				"[Online Testing] finished test with %d candidate response times collected for candidate rules: %+v\n",
 				t.candidateGroupResponseTimes.Len(),
@@ -179,7 +184,7 @@ func (t *OnlineTraining) AddControlResponseTime(duration time.Duration) {
 	t.controlGroupResponseTimes.Add(duration)
 }
 
-func (t *OnlineTraining) sampleCandidateGroupProbabilities() []filters.PathProbabilityRule {
+func (t *OnlineTraining) sampleCandidateGroupProbabilities(pathIdxToChange int) []filters.PathProbabilityRule {
 	t.mux.Lock()
 	defer t.mux.Unlock()
 
@@ -188,12 +193,10 @@ func (t *OnlineTraining) sampleCandidateGroupProbabilities() []filters.PathProba
 	// probability. The variance is set to 0.5 based on empirical observations.
 	variance := 0.8
 
-	nextIndexToSample := (t.lastPathIndexSampled + 1) % len(t.paths)
-
 	var rules []filters.PathProbabilityRule
 	for i, path := range t.paths {
 		var probability float64
-		if i == nextIndexToSample {
+		if i == pathIdxToChange {
 			probability = stats.SampleTruncatedNormalDistribution(
 				0,
 				1,
@@ -210,11 +213,10 @@ func (t *OnlineTraining) sampleCandidateGroupProbabilities() []filters.PathProba
 		})
 	}
 
-	t.lastPathIndexSampled = nextIndexToSample
 	return rules
 }
 
-func (t *OnlineTraining) checkCandidateImprovesResponseTimes() bool {
+func (t *OnlineTraining) checkCandidateCausesIprovement(hasProbabilityDecreased bool) bool {
 	controlAggregate := t.controlGroupResponseTimes.Aggregate()
 	candidateAggregate := t.candidateGroupResponseTimes.Aggregate()
 
@@ -230,9 +232,21 @@ func (t *OnlineTraining) checkCandidateImprovesResponseTimes() bool {
 		return false
 	}
 
+	controlAll := t.controlGroupResponseTimes.All()
+	candidateAll := t.candidateGroupResponseTimes.All()
+
+	// If the probability decreases and the application remains stable, we
+	// prefer the probability to be lowered to improve business objectives.
+	if hasProbabilityDecreased {
+		// The K-S test will return false if there is an insignificant
+		// difference in response times.
+		return 0.97*controlP95 < candidateP95 && candidateP95 < 1.03*controlP95 &&
+			!stats.KolmogorovSmirnovTestRejection(controlAll, candidateAll, stats.P90)
+	}
+
 	// The candidate P95 must be significantly lower than the control P95 for
 	// there to be a potential improvement in response times.
-	if 0.9*controlP95 <= candidateP95 {
+	if candidateP95 >= 0.95*controlP95 {
 		return false
 	}
 
@@ -240,9 +254,7 @@ func (t *OnlineTraining) checkCandidateImprovesResponseTimes() bool {
 	// by performing a Kolmogorov-Smirnov test at the 99th percentile. The 99th
 	// percentile has been chosen based on empirical tests where the 99.5th
 	// percentile is overly sensitive.
-	controlAll := t.controlGroupResponseTimes.All()
-	candidateAll := t.candidateGroupResponseTimes.All()
-	return stats.KolmogorovSmirnovTestRejection(controlAll, candidateAll, stats.P99d5)
+	return stats.KolmogorovSmirnovTestRejection(controlAll, candidateAll, stats.P99)
 }
 
 func RequestHasCookie(request *fasthttp.Request) bool {
