@@ -101,12 +101,22 @@ func (t *OnlineTraining) StopLoop() error {
 func (t *OnlineTraining) trainingLoop() {
 	defer t.loopWaiter.Done()
 
+	// Used to ensure the controller responds to changes in PID values before
+	// continuing with another training loop. Initially set to true to allow
+	// the controller to react to a new load test.
+	isInAdjustmentPeriod := true
+
 	for {
 		select {
 		// Stop the control loop when Stop() called.
 		case <-t.loopStop:
 			return
 		default:
+			if isInAdjustmentPeriod {
+				isInAdjustmentPeriod = false
+				continue
+			}
+
 			// Sample new rules.
 			newCandidateRules := t.sampleCandidateGroupProbabilities()
 			t.candidatePathProbabilities.Clear()
@@ -127,7 +137,7 @@ func (t *OnlineTraining) trainingLoop() {
 			select {
 			case <-t.loopStop:
 				return
-			case <-time.After(3 * time.Minute):
+			case <-time.After(2 * time.Minute):
 				break
 			}
 
@@ -145,6 +155,7 @@ func (t *OnlineTraining) trainingLoop() {
 				if err := t.controlPathProbabilities.SetAll(newCandidateRules); err != nil {
 					panic(fmt.Errorf("expected t.controlPathProbabilities.SetAll(rules = %+v) returns nil err; got err = %w", newCandidateRules, err))
 				}
+				isInAdjustmentPeriod = true
 			}
 		}
 	}
@@ -221,7 +232,7 @@ func (t *OnlineTraining) checkCandidateImprovesResponseTimes() bool {
 
 	// The candidate P95 must be significantly lower than the control P95 for
 	// there to be a potential improvement in response times.
-	if 0.8*controlP95 <= candidateP95 {
+	if 0.85*controlP95 <= candidateP95 {
 		return false
 	}
 
