@@ -128,7 +128,7 @@ func (t *OnlineTraining) trainingLoop() {
 			if err := t.candidatePathProbabilities.SetAll(newCandidateRules); err != nil {
 				panic(fmt.Errorf("expected t.candidatePathProbabilities.SetAll(rules = %+v) returns nil err; got err = %w", newCandidateRules, err))
 			}
-			log.Printf("[Online Testing] starting test with candidate rules: %+v\n", newCandidateRules)
+			log.Printf("[Online Testing] starting test with candidate rules: %+v\n\tprobability decreased: %v\n", newCandidateRules, hasProbabilityDecreased)
 			t.logger.LogOnlineTrainingProbabilities(
 				t.controlPathProbabilities.ListForPaths(t.paths),
 				t.candidatePathProbabilities.ListForPaths(t.paths),
@@ -154,7 +154,7 @@ func (t *OnlineTraining) trainingLoop() {
 				t.candidateGroupResponseTimes.Len(),
 				newCandidateRules,
 			)
-			log.Printf("[Online Testing] significant reduction? %t\n", comparison)
+			log.Printf("[Online Testing] significant improvement? %t\n", comparison)
 			if comparison {
 				log.Printf("[Online Testing] updating control with candidate rules\n")
 				if err := t.controlPathProbabilities.SetAll(newCandidateRules); err != nil {
@@ -244,9 +244,9 @@ func (t *OnlineTraining) checkCandidateCausesImprovement(hasProbabilityDecreased
 			!stats.KolmogorovSmirnovTestRejection(controlAll, candidateAll, stats.P90)
 	}
 
-	// The candidate P95 must be significantly lower than the control P95 for
+	// The candidate P95 must be  lower than the control P95 for
 	// there to be a potential improvement in response times.
-	if !(candidateP95 < 0.98*controlP95) {
+	if !(candidateP95 < controlP95) {
 		return false
 	}
 
