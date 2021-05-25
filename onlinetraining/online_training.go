@@ -120,7 +120,7 @@ func (t *OnlineTraining) trainingLoop() {
 
 			// Sample new rules.
 			newCandidateRules := t.sampleCandidateGroupProbabilities(pathIdxToChange)
-			hasProbabilityDecreased := t.controlPathProbabilities.Get(t.paths[pathIdxToChange]) <
+			hasProbabilityDecreased := t.controlPathProbabilities.Get(t.paths[pathIdxToChange]) >
 				t.candidatePathProbabilities.Get(t.paths[pathIdxToChange])
 			pathIdxToChange = (pathIdxToChange + 1) % len(t.paths)
 
@@ -148,7 +148,7 @@ func (t *OnlineTraining) trainingLoop() {
 
 			// Test whether the rules collected are significant, overriding the
 			// main path probabilities if so.
-			comparison := t.checkCandidateCausesIprovement(hasProbabilityDecreased)
+			comparison := t.checkCandidateCausesImprovement(hasProbabilityDecreased)
 			log.Printf(
 				"[Online Testing] finished test with %d candidate response times collected for candidate rules: %+v\n",
 				t.candidateGroupResponseTimes.Len(),
@@ -216,7 +216,7 @@ func (t *OnlineTraining) sampleCandidateGroupProbabilities(pathIdxToChange int) 
 	return rules
 }
 
-func (t *OnlineTraining) checkCandidateCausesIprovement(hasProbabilityDecreased bool) bool {
+func (t *OnlineTraining) checkCandidateCausesImprovement(hasProbabilityDecreased bool) bool {
 	controlAggregate := t.controlGroupResponseTimes.Aggregate()
 	candidateAggregate := t.candidateGroupResponseTimes.Aggregate()
 
@@ -246,7 +246,7 @@ func (t *OnlineTraining) checkCandidateCausesIprovement(hasProbabilityDecreased 
 
 	// The candidate P95 must be significantly lower than the control P95 for
 	// there to be a potential improvement in response times.
-	if candidateP95 >= 0.95*controlP95 {
+	if !(candidateP95 < 0.98*controlP95) {
 		return false
 	}
 
