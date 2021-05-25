@@ -127,7 +127,7 @@ func (t *OnlineTraining) trainingLoop() {
 			select {
 			case <-t.loopStop:
 				return
-			case <-time.After(2 * time.Minute):
+			case <-time.After(3 * time.Minute):
 				break
 			}
 
@@ -221,7 +221,7 @@ func (t *OnlineTraining) checkCandidateImprovesResponseTimes() bool {
 
 	// The candidate P95 must be significantly lower than the control P95 for
 	// there to be a potential improvement in response times.
-	if 0.7*controlP95 <= candidateP95 {
+	if 0.5*controlP95 <= candidateP95 {
 		return false
 	}
 
