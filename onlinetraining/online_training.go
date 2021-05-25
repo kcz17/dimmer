@@ -114,20 +114,26 @@ func (t *OnlineTraining) trainingLoop() {
 			return
 		default:
 			if isInAdjustmentPeriod {
-				isInAdjustmentPeriod = false
-				continue
+				// Wait for enough data to be collected while continuing to listen for
+				// Stop() in a non-blocking manner.
+				select {
+				case <-t.loopStop:
+					return
+				case <-time.After(2 * time.Minute):
+					isInAdjustmentPeriod = false
+				}
 			}
 
 			// Sample new rules.
 			newCandidateRules := t.sampleCandidateGroupProbabilities(pathIdxToChange)
-			hasProbabilityDecreased := t.controlPathProbabilities.Get(t.paths[pathIdxToChange]) >
-				t.candidatePathProbabilities.Get(t.paths[pathIdxToChange])
-			pathIdxToChange = (pathIdxToChange + 1) % len(t.paths)
-
 			t.candidatePathProbabilities.Clear()
 			if err := t.candidatePathProbabilities.SetAll(newCandidateRules); err != nil {
 				panic(fmt.Errorf("expected t.candidatePathProbabilities.SetAll(rules = %+v) returns nil err; got err = %w", newCandidateRules, err))
 			}
+			hasProbabilityDecreased := t.controlPathProbabilities.Get(t.paths[pathIdxToChange]) >
+				t.candidatePathProbabilities.Get(t.paths[pathIdxToChange])
+			pathIdxToChange = (pathIdxToChange + 1) % len(t.paths)
+
 			log.Printf("[Online Testing] starting test with candidate rules: %+v\n\tprobability decreased: %v\n", newCandidateRules, hasProbabilityDecreased)
 			t.logger.LogOnlineTrainingProbabilities(
 				t.controlPathProbabilities.ListForPaths(t.paths),
@@ -142,7 +148,7 @@ func (t *OnlineTraining) trainingLoop() {
 			select {
 			case <-t.loopStop:
 				return
-			case <-time.After(2 * time.Minute):
+			case <-time.After(3 * time.Minute):
 				break
 			}
 
