@@ -34,17 +34,17 @@ type waterBoiler struct {
 }
 
 func newWaterBoiler() *waterBoiler {
-	return &waterBoiler{temp: 20}
+	return &waterBoiler{temp: 0}
 }
 
 func (b *waterBoiler) advance(powerDuringTimeElapsed float64, secondsElapsed int) {
 	// Produce heat over the elapsed seconds only if boiler has power.
 	if powerDuringTimeElapsed > 0 {
-		b.temp += powerDuringTimeElapsed * float64(secondsElapsed)
+		b.temp += 0.01 * powerDuringTimeElapsed * float64(secondsElapsed)
 	}
 
 	// Dissipate heat over the elapsed seconds.
-	b.temp -= 0.02 * float64(secondsElapsed)
+	b.temp -= 0.2 * float64(secondsElapsed)
 }
 
 // Basic integration test over a simulated period of time.
@@ -55,8 +55,8 @@ func TestPidController_WaterBoilerSimulation(t *testing.T) {
 	controller, err := NewPIDController(
 		clock,
 		setpoint,
-		0.05,
-		0,
+		0.5,
+		0.002,
 		0,
 		false,
 		0,
@@ -66,7 +66,7 @@ func TestPidController_WaterBoilerSimulation(t *testing.T) {
 	assert.Nilf(t, err, "expected NewPIDController(...) has no err; got %v", err)
 
 	loops := 300
-	secondsPerIteration := 5
+	secondsPerIteration := 10
 	times := make([]int, loops)
 	temps := make([]float64, loops)
 	powers := make([]float64, loops)
