@@ -221,7 +221,7 @@ func (t *OnlineTraining) checkCandidateImprovesResponseTimes() bool {
 
 	// The candidate P95 must be significantly lower than the control P95 for
 	// there to be a potential improvement in response times.
-	if 0.7*controlP95 <= candidateP95 {
+	if 0.8*controlP95 <= candidateP95 {
 		return false
 	}
 
