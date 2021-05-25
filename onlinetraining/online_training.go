@@ -58,7 +58,7 @@ func NewOnlineTraining(logger logging.Logger, paths []string, controlPathProbabi
 
 	return &OnlineTraining{
 		logger:                      logger,
-		controlGroupResponseTimes:   responsetimecollector.NewTachymeterCollector(2000),
+		controlGroupResponseTimes:   responsetimecollector.NewTachymeterCollector(500),
 		candidateGroupResponseTimes: responsetimecollector.NewArrayCollector(),
 		candidatePathProbabilities:  candidatePathProbabilities,
 		paths:                       paths,
@@ -197,11 +197,11 @@ func (t *OnlineTraining) sampleCandidateGroupProbabilities() []filters.PathProba
 			probability = stats.SampleTruncatedNormalDistribution(
 				0,
 				1,
-				t.candidatePathProbabilities.Get(path),
+				t.controlPathProbabilities.Get(path),
 				variance,
 			)
 		} else {
-			probability = t.candidatePathProbabilities.Get(path)
+			probability = t.controlPathProbabilities.Get(path)
 		}
 
 		rules = append(rules, filters.PathProbabilityRule{
@@ -232,7 +232,7 @@ func (t *OnlineTraining) checkCandidateImprovesResponseTimes() bool {
 
 	// The candidate P95 must be significantly lower than the control P95 for
 	// there to be a potential improvement in response times.
-	if 0.85*controlP95 <= candidateP95 {
+	if 0.9*controlP95 <= candidateP95 {
 		return false
 	}
 
