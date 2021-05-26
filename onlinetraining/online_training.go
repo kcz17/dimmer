@@ -57,7 +57,7 @@ func NewOnlineTraining(logger logging.Logger, paths []string, controlPathProbabi
 
 	return &OnlineTraining{
 		logger:                      logger,
-		controlGroupResponseTimes:   responsetimecollector.NewTachymeterCollector(2000),
+		controlGroupResponseTimes:   responsetimecollector.NewTachymeterCollector(5000),
 		candidateGroupResponseTimes: responsetimecollector.NewArrayCollector(),
 		candidatePathProbabilities:  candidatePathProbabilities,
 		paths:                       paths,
@@ -247,7 +247,7 @@ func (t *OnlineTraining) checkCandidateCausesImprovement(hasProbabilityDecreased
 		// The K-S test will return false if there is an insignificant
 		// difference in response times.
 		return 0.97*controlP95 < candidateP95 && candidateP95 < 1.03*controlP95 &&
-			!stats.KolmogorovSmirnovTestRejection(controlAll, candidateAll, stats.P90)
+			!stats.KolmogorovSmirnovTestRejection(controlAll, candidateAll, stats.P95)
 	}
 
 	// The candidate P95 must be  lower than the control P95 for
