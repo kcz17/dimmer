@@ -57,7 +57,7 @@ func NewOnlineTraining(logger logging.Logger, paths []string, controlPathProbabi
 
 	return &OnlineTraining{
 		logger:                      logger,
-		controlGroupResponseTimes:   responsetimecollector.NewTachymeterCollector(5000),
+		controlGroupResponseTimes:   responsetimecollector.NewTachymeterCollector(1500),
 		candidateGroupResponseTimes: responsetimecollector.NewArrayCollector(),
 		candidatePathProbabilities:  candidatePathProbabilities,
 		paths:                       paths,
